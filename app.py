@@ -14,7 +14,6 @@ st.markdown(
     h1 { color: #D4AF37 !important; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-weight: 600; }
     h3 { color: #E5C158 !important; font-weight: 500; margin-top: 20px; }
     
-    /* Clean, interactive card layouts for statistics metrics */
     .metric-card {
         background-color: #161B22;
         border: 1px solid #2D3748;
@@ -26,7 +25,6 @@ st.markdown(
     .metric-val { color: #D4AF37; font-size: 24px; font-weight: bold; }
     .metric-lbl { color: #A0AEC0; font-size: 14px; }
     
-    /* Input and dropdown search components borders customization */
     div[data-baseweb="select"], div[data-baseweb="input"] {
         border: 1px solid #4A5568 !important;
         border-radius: 6px !important;
@@ -35,7 +33,6 @@ st.markdown(
         border-color: #D4AF37 !important;
     }
     
-    /* Action Buttons styling */
     .stButton>button {
         background: linear-gradient(135deg, #D4AF37 0%, #AA7C11 100%) !important;
         color: #0F1216 !important;
@@ -64,9 +61,23 @@ HTTP_HEADERS = {
     "Prefer": "return=representation"
 }
 
-# In-Memory Framework Core States Setup
-if "auric_master_dataframe" not in st.session_state:
-    st.session_state["auric_master_dataframe"] = pd.DataFrame()
+# --- AUTOMATED PERMANENT BACKGROUND RECOVERY LOGIC ---
+@st.cache_data(ttl=60) # Fast server cache checking data modifications every 60 seconds
+def fetch_permanent_cloud_records():
+    try:
+        url = f"{BASE_API_ROUTE}?select=*&order=doc_number"
+        response = requests.get(url, headers=HTTP_HEADERS)
+        if response.status_code == 200:
+            res_data = response.json()
+            if res_data and len(res_data) > 0:
+                return pd.DataFrame(res_data)
+        return pd.DataFrame()
+    except Exception:
+        return pd.DataFrame()
+
+# Initialize data using the live automated backup scan loop
+if "auric_master_dataframe" not in st.session_state or st.session_state["auric_master_dataframe"].empty:
+    st.session_state["auric_master_dataframe"] = fetch_permanent_cloud_records()
 
 df = st.session_state["auric_master_dataframe"]
 
@@ -76,23 +87,21 @@ with header_col1:
     st.title("✨ Auric Dispatch Control Dashboard")
     st.caption("Operational Logistics & Shipment Manifest Tracking System")
 with header_col2:
-    # Clean, labeled login toggle simulation for regional testing environments
     active_profile = st.selectbox("👤 Switch View Profile:", ["Full System Administrator", "Restricted Regional User"])
 
 # --- SCREEN 1: THE EMPTY CANVAS INGESTION STATE ---
 if df.empty:
     st.markdown("<br><br>", unsafe_allow_html=True)
-    st.info("👋 Welcome! The tracking dashboard is currently empty. Drop your latest Excel sheet below to instantly launch the tracking data view.")
+    st.info("👋 Welcome! The live cloud storage is currently empty. Drop your master Excel tracker sheet here to populate all data lines permanently.")
     
     uploaded_file = st.file_uploader("Upload Master Workbook Sheet (.xlsx)", type=["xlsx"])
     if uploaded_file:
         try:
-            with st.spinner("Analyzing and parsing rows structure..."):
+            with st.spinner("Analyzing data matrices and processing lines transfers..."):
                 excel_df = pd.read_excel(uploaded_file, header=2)
             
             excel_df.columns = [str(c).strip().lower().replace('.', '').replace(' ', '_') for c in excel_df.columns]
             
-            # Simple direct labels vocabulary mapper definitions
             translations = {
                 'party_type': ['party_type', 'partytype'],
                 'doc_number': ['doc_number', 'doc_no', 'document_number', 'document_no'],
@@ -110,7 +119,9 @@ if df.empty:
             
             final_mapped_df = pd.DataFrame()
             for db_field, sample_matches in translations.items():
-                matched_col = next((c for c in excel_df.columns if c in sample_matches or any(sm in c for sm in sample_matches)), None)
+                matched_col = next((c for c in excel_df.columns if c in sample_matches or any(sm in c for pm in sample_matches for sm in pm if isinstance(pm, list) or sm in pm)), None)
+                if not matched_col:
+                    matched_col = next((c for c in excel_df.columns if c in sample_matches or any(sm in c for sm in sample_matches)), None)
                 if matched_col: final_mapped_df[db_field] = excel_df[matched_col]
             
             if 'doc_number' not in final_mapped_df.columns and len(excel_df.columns) > 1:
@@ -130,15 +141,24 @@ if df.empty:
                         except: cleaned_row['doc_net_value'] = 0.0
                     sanitized_rows.append(cleaned_row)
                 
-                st.session_state["auric_master_dataframe"] = pd.DataFrame(sanitized_rows)
-                st.success(f"🎉 Success! Completely loaded {len(final_mapped_df)} tracking entries into the active grid canvas.")
+                # Fast bulk transaction injection matrix call straight to cloud tables
+                st.info(f"Synchronizing rows across persistent clouds storage systems...")
+                BATCH_SIZE = 100
+                for i in range(0, len(sanitized_rows), BATCH_SIZE):
+                    chunk = sanitized_rows[i:i + BATCH_SIZE]
+                    headers_post = {**HTTP_HEADERS, "Prefer": "resolution=merge-duplicates, return=minimal"}
+                    requests.post(BASE_API_ROUTE, headers=headers_post, data=json.dumps(chunk))
+                
+                st.cache_data.clear() # Wipe fast reader caches to load data fresh
+                st.session_state["auric_master_dataframe"] = fetch_permanent_cloud_records()
+                st.success("🎉 Success! Tracking framework active across all clusters.")
                 st.rerun()
         except Exception as e:
             st.error(f"Error reading spreadsheet file layout: {e}")
 
 # --- SCREEN 2: THE ACTIVE USER-FRIENDLY DASHBOARD CANVAS ---
 else:
-    # 1. VISUAL enterprise key-performance indicators summary metrics bar
+    # 1. Live operations stats summaries
     st.markdown("### 📊 Live Operations Summary")
     stat_col1, stat_col2, stat_col3, stat_col4 = st.columns(4)
     
@@ -156,11 +176,10 @@ else:
     with stat_col4:
         st.markdown(f'<div class="metric-card"><div class="metric-val">{kerala_count}</div><div class="metric-lbl">Active Kerala Nodes</div></div>', unsafe_allow_html=True)
 
-    # Simulated regional user profiles logic routing to simplify dashboard clutter
     if active_profile == "Restricted Regional User" and 'party_state' in df.columns:
         df = df[df['party_state'].astype(str).str.upper() == 'KERALA']
 
-    # 2. INTUITIVE SIMPLIFIED FILTER CONTROLS BAR LAYOUT
+    # 2. Filter interface slicers row
     st.markdown("### 🔍 Search and Filter Tools")
     search_col1, search_col2, search_col3 = st.columns([2, 1, 1])
     
@@ -171,7 +190,7 @@ else:
     with search_col3:
         type_filter = st.selectbox("Filter by Channel Partner:", ["All Types"] + sorted(df['party_type'].dropna().unique().tolist()) if 'party_type' in df.columns else ["All Types"])
 
-    # Apply search filter reductions
+    # Reduce matrix lines matching expressions queries
     f_df = df.copy()
     if global_search:
         search_lower = global_search.lower()
@@ -186,7 +205,7 @@ else:
     if type_filter != "All Types" and 'party_type' in f_df.columns:
         f_df = f_df[f_df['party_type'] == type_filter]
 
-    # 3. HIGH-DENSITY PAGINATION NAVIGATION HUB SPLICER BLOCK
+    # 3. Pagination row controllers
     ROWS_PER_PAGE = 100
     total_filtered = len(f_df)
     max_pages = max(1, ((total_filtered - 1) // ROWS_PER_PAGE) + 1)
@@ -201,15 +220,13 @@ else:
         )
     with nav_col2:
         st.markdown("<br>", unsafe_allow_html=True)
-        # Clean data report export features
         csv_buffer = f_df.to_csv(index=False).encode('utf-8')
         st.download_button(label="📥 Export Report to CSV", data=csv_buffer, file_name="auric_filtered_manifest.csv", mime="text/csv")
 
-    # Slice the filtered data frame to exact index segments coordinates
     start_offset = (current_page - 1) * ROWS_PER_PAGE
     paginated_slice_df = f_df.iloc[start_offset:start_offset + ROWS_PER_PAGE]
 
-    # 4. STREAMLINED CLEAN OPERATIONS VIEW DATA DATAGRID
+    # 4. Standard business labels definitions dictionary map
     user_friendly_headers_map = {
         'consignee_name': 'Consignee Client Name',
         'party_name': 'Registered Party Name',
@@ -229,7 +246,7 @@ else:
     if not visible_cols: visible_cols = display_df.columns.tolist()
     st.dataframe(display_df[visible_cols], use_container_width=True, hide_index=True)
 
-    # 5. SINGLE-CLICK MANUAL FIELDS UPDATE FORM MODULE DRAWER
+    # 5. Row edits action panels
     st.markdown("---")
     st.markdown("### 📝 Quick Row Modification Action Box")
     
@@ -251,13 +268,17 @@ else:
                     update_payload_object = {"lr_current_status": updated_status_str, "lr_status_remark": updated_remarks_str}
                     requests.patch(patch_endpoint_target, headers=HTTP_HEADERS, json=update_payload_object)
                     
-                    # Apply edit values seamlessly inside the fast memory session cache indices lines arrays
-                    st.session_state["auric_master_dataframe"].loc[st.session_state["auric_master_dataframe"]['doc_number'] == target_selection, 'lr_current_status'] = updated_status_str
-                    st.toast("Record parameters updated and synchronized successfully!")
+                    st.cache_data.clear()
+                    st.session_state["auric_master_dataframe"] = fetch_permanent_cloud_records()
+                    st.toast("Record updated and synchronized across all servers perfectly!")
                     st.rerun()
     
-    # 6. RESET GATEWAY BUTTON
+    # 6. Global Reset Button
     st.markdown("<br><br><br>", unsafe_allow_html=True)
-    if st.button("🔄 Reset Portal and Ingest New Sheet Version File"):
-        st.session_state["auric_master_dataframe"] = pd.DataFrame()
-        st.rerun()
+    if st.button("🚨 Clear Cloud Database and Ingest New Sheet Version"):
+        with st.spinner("Purging persistent tables indexes entries..."):
+            requests.delete(f"{BASE_API_ROUTE}?select=*", headers=HTTP_HEADERS)
+            st.cache_data.clear()
+            st.session_state["auric_master_dataframe"] = pd.DataFrame()
+            st.toast("Cloud database cleared completely.")
+            st.rerun()
