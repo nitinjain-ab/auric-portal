@@ -3,85 +3,59 @@ import pandas as pd
 import requests
 import json
 
-st.set_page_config(page_title="Auric Control Hub v4.0", layout="wide")
+# Set up clean page layout
+st.set_page_config(page_title="Auric Dispatch Tracker", layout="wide")
 
-# --- NATIVE PREMIUM AURIC BEAUTY THEMING COLORS CONFIG ---
+# --- CLEAN ENTERPRISE VISUAL THEMING ---
 st.markdown(
     """
     <style>
-    /* Global Background and Canvas Settings */
-    .stApp {
-        background-color: #0F1216;
-        color: #E2E8F0;
-    }
+    .stApp { background-color: #0F1216; color: #E2E8F0; }
+    h1 { color: #D4AF37 !important; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-weight: 600; }
+    h3 { color: #E5C158 !important; font-weight: 500; margin-top: 20px; }
     
-    /* Main Headers Branding */
-    h1 {
-        color: #D4AF37 !important;
-        font-family: 'Playfair Display', serif;
-        font-weight: 700;
-        letter-spacing: 0.5px;
+    /* Clean, interactive card layouts for statistics metrics */
+    .metric-card {
+        background-color: #161B22;
+        border: 1px solid #2D3748;
+        border-radius: 8px;
+        padding: 15px;
+        text-align: center;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     }
+    .metric-val { color: #D4AF37; font-size: 24px; font-weight: bold; }
+    .metric-lbl { color: #A0AEC0; font-size: 14px; }
     
-    h3 {
-        color: #E5C158 !important;
-        border-bottom: 1px solid #2D3748;
-        padding-bottom: 8px;
-    }
-    
-    /* Sidebar Configuration Styling */
-    section[data-testid="stSidebar"] {
-        background-color: #161B22 !important;
-        border-right: 1px solid #2D3748;
-    }
-    
-    /* Input Fields and Slicers Control Boxes */
-    div[data-testid="stHeader"] {
-        background-color: rgba(15, 18, 22, 0.6);
-    }
-    
+    /* Input and dropdown search components borders customization */
     div[data-baseweb="select"], div[data-baseweb="input"] {
-        background-color: #1A202C !important;
-        border: 1px solid #D4AF37 !important;
+        border: 1px solid #4A5568 !important;
         border-radius: 6px !important;
     }
-    
-    /* Custom Alert Container Cards */
-    .stAlert {
-        background-color: #1E232A !important;
-        border-left: 5px solid #D4AF37 !important;
-        color: #E2E8F0 !important;
+    div[data-baseweb="select"]:focus-within, div[data-baseweb="input"]:focus-within {
+        border-color: #D4AF37 !important;
     }
     
-    /* Premium Brand Buttons */
+    /* Action Buttons styling */
     .stButton>button {
         background: linear-gradient(135deg, #D4AF37 0%, #AA7C11 100%) !important;
         color: #0F1216 !important;
         font-weight: 600 !important;
-        border: none !important;
         border-radius: 6px !important;
-        transition: all 0.3s ease;
+        border: none !important;
+        padding: 8px 20px !important;
     }
-    
-    .stButton>button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(212, 175, 55, 0.3);
-    }
-    
-    div.block-container { padding-top: 1.5rem; }
     </style>
     """, unsafe_allow_html=True
 )
 
-# Fetch clean credentials directly from your secrets box configuration layers
+# Fetch system configurations securely from environment vaults
 try:
     SUPABASE_URL = st.secrets["connections"]["supabase"]["supabase_url"].strip().rstrip('/')
     SUPABASE_KEY = st.secrets["connections"]["supabase"]["supabase_key"].strip()
 except Exception:
-    st.error("Missing configuration credentials inside the Streamlit Cloud Secrets box.")
+    st.error("Missing configuration keys. Please verify your Streamlit secrets settings panel.")
     st.stop()
 
-# Direct Endpoint Target Mappings
 BASE_API_ROUTE = f"{SUPABASE_URL}/rest/v1/shipments"
 HTTP_HEADERS = {
     "apikey": SUPABASE_KEY,
@@ -90,172 +64,36 @@ HTTP_HEADERS = {
     "Prefer": "return=representation"
 }
 
-# --- INITIALIZE HYBRID TRANSACTION MEMORY VAULT ---
+# In-Memory Framework Core States Setup
 if "auric_master_dataframe" not in st.session_state:
     st.session_state["auric_master_dataframe"] = pd.DataFrame()
 
-if "user_roles_db" not in st.session_state:
-    st.session_state["user_roles_db"] = {
-        "admin_master": {"allowed_parties": "All", "allowed_types": "All", "allowed_states": "All", "rights": ["View", "Edit", "Download"]},
-        "regional_kerala": {"allowed_parties": "All", "allowed_types": ["Distributor"], "allowed_states": ["KERALA"], "rights": ["View", "Edit"]}
-    }
-if "current_logged_user" not in st.session_state:
-    st.session_state["current_logged_user"] = "admin_master"
-
 df = st.session_state["auric_master_dataframe"]
 
-app_col1, app_col2 = st.columns([3, 1])
-with app_col1:
-    st.title("✨ Auric Dispatch Master Control Board")
-    st.caption("Ver 4.0 Luxury Enterprise Dashboard Engine • High-Density Color Palette Setup")
-with app_col2:
-    user_options = list(st.session_state["user_roles_db"].keys())
-    st.session_state["current_logged_user"] = st.selectbox(
-        "👤 Active Login Session:", user_options, 
-        index=user_options.index(st.session_state["current_logged_user"])
-    )
+# --- BRANDING HEADER AREA ---
+header_col1, header_col2 = st.columns([3, 1])
+with header_col1:
+    st.title("✨ Auric Dispatch Control Dashboard")
+    st.caption("Operational Logistics & Shipment Manifest Tracking System")
+with header_col2:
+    # Clean, labeled login toggle simulation for regional testing environments
+    active_profile = st.selectbox("👤 Switch View Profile:", ["Full System Administrator", "Restricted Regional User"])
 
-current_user = st.session_state["current_logged_user"]
-user_rules = st.session_state["user_roles_db"][current_user]
-
-if "View" not in user_rules["rights"]:
-    st.error("🚫 Access Denied: Your current role lacks dashboard viewing properties.")
-    st.stop()
-
-# --- DISPLAY CANVAS OR INGESTION PLACEHOLDER ---
+# --- SCREEN 1: THE EMPTY CANVAS INGESTION STATE ---
 if df.empty:
-    st.markdown(
-        """
-        <div style="background-color: #1E232A; padding: 20px; border-left: 5px solid #D4AF37; border-radius: 4px;">
-            <p style="color: #E2E8F0; margin: 0; font-weight: 500;">⚠️ High-Speed Operational Memory Active: Please upload your master Excel file in the processing panel below to instantly populate your dashboard grid canvas.</p>
-        </div>
-        """, unsafe_allow_html=True
-    )
-else:
-    if current_user != "admin_master":
-        if user_rules["allowed_parties"] != "All" and 'party_name' in df.columns: df = df[df['party_name'].isin(user_rules["allowed_parties"])]
-        if user_rules["allowed_types"] != "All" and 'party_type' in df.columns: df = df[df['party_type'].isin(user_rules["allowed_types"])]
-        if user_rules["allowed_states"] != "All" and 'party_state' in df.columns: df = df[df['party_state'].isin(user_rules["allowed_states"])]
-
-    st.markdown("### 🎛️ Active Dashboard Filters & Slicers")
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        search_q = st.text_input("🔍 Search box filtering query engine:", "")
-    with col2:
-        ptype = st.selectbox("Party-Type", ["All"] + df['party_type'].dropna().unique().tolist() if 'party_type' in df.columns else ["All"])
-    with col3:
-        pstate = st.selectbox("State Zone", ["All"] + df['party_state'].dropna().unique().tolist() if 'party_state' in df.columns else ["All"])
-    with col4:
-        pname = st.selectbox("Party Name Selector", ["All"] + df['party_name'].dropna().unique().tolist() if 'party_name' in df.columns else ["All"])
-
-    f_df = df.copy()
-    if search_q:
-        match_conditions = []
-        for match_field in ['doc_number', 'party_name', 'lr_number', 'consignee_name']:
-            if match_field in f_df.columns:
-                match_conditions.append(f_df[match_field].astype(str).str.contains(search_q, case=False))
-        if match_conditions:
-            final_mask = match_conditions[0]
-            for mask in match_conditions[1:]:
-                final_mask = final_mask | mask
-            f_df = f_df[final_mask]
-
-    if ptype != "All" and 'party_type' in f_df.columns: f_df = f_df[f_df['party_type'] == ptype]
-    if pstate != "All" and 'party_state' in f_df.columns: f_df = f_df[f_df['party_state'] == pstate]
-    if pname != "All" and 'party_name' in f_df.columns: f_df = f_df[f_df['party_name'] == pname]
-
-    # --- PAGINATION COMPONENT ---
-    st.markdown("---")
-    total_filtered_rows = len(f_df)
-    ROWS_PER_PAGE = 100
-    total_pages = max(1, ((total_filtered_rows - 1) // ROWS_PER_PAGE) + 1)
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.info("👋 Welcome! The tracking dashboard is currently empty. Drop your latest Excel sheet below to instantly launch the tracking data view.")
     
-    page_col1, page_col2, page_col3 = st.columns([1, 2, 1])
-    with page_col1:
-        st.write(f"📊 Total Records: **{total_filtered_rows}**")
-    with page_col2:
-        current_page = st.selectbox(
-            f"📖 Select Dashboard Page Block (Showing {ROWS_PER_PAGE} rows at a time):", 
-            options=range(1, total_pages + 1),
-            format_func=lambda x: f"Page {x} of {total_pages} (Rows {(x-1)*ROWS_PER_PAGE + 1} - {min(x*ROWS_PER_PAGE, total_filtered_rows)})"
-        )
-
-    start_idx = (current_page - 1) * ROWS_PER_PAGE
-    end_idx = start_idx + ROWS_PER_PAGE
-    paginated_df = f_df.iloc[start_idx:end_idx]
-
-    # --- DATAGRID DISPLAY WITH LIGHT/DARK CONTRAST INTERFACE ---
-    st.markdown("### 📦 Active Shipments Log Manifest")
-    ideal_cols = ['consignee_name', 'party_name', 'party_code', 'party_type', 'doc_number', 'doc_date', 'doc_net_value', 'lr_number', 'final_lr_date', 'lr_current_status', 'lr_status_date']
-    render_cols = [c for c in ideal_cols if c in paginated_df.columns]
-    if not render_cols:
-        render_cols = paginated_df.columns.tolist()
-        
-    st.dataframe(paginated_df[render_cols], use_container_width=True, hide_index=True)
-
-    if "Download" in user_rules["rights"]:
-        csv_buffer = f_df[render_cols].to_csv(index=False).encode('utf-8')
-        st.download_button(label="📥 Download ALL Filtered Entries as Matrix CSV Report", data=csv_buffer, file_name="auric_tracker_report.csv", mime="text/csv")
-
-    # MANUAL LIVE-SYNC CLOUD ROW OPERATIONS DRAWER PANEL
-    st.markdown("---")
-    st.markdown("### 📝 Manual Row Level Selection Operations")
-    if "Edit" not in user_rules["rights"]:
-        st.error("🚫 Access Blocked: Your custom user type role does not hold cell modification properties.")
-    elif 'doc_number' not in f_df.columns:
-        st.warning("Editing disabled: 'doc_number' coordinate fields missing from active layout dataset.")
-    else:
-        target_doc = st.selectbox("Choose a Doc Number to target edits:", ["-- None Selected --"] + paginated_df['doc_number'].tolist())
-        if target_doc != "-- None Selected --":
-            target_row = paginated_df[paginated_df['doc_number'] == target_doc].iloc[0]
-            btn_col1, btn_col2 = st.columns(2)
-            with btn_col1:
-                if st.button("📝 Form Section: LR Status Fields"): st.session_state.editor = "LR"
-            with btn_col2:
-                if st.button("📄 Form Section: Order-Approval Fields"): st.session_state.editor = "APP"
-
-            if "editor" in st.session_state:
-                if st.session_state.editor == "LR":
-                    st.subheader(f"Modify LR Fields for {target_doc}")
-                    new_status = st.text_input("LR Current Status", value=str(target_row.get('lr_current_status', '')))
-                    new_remark = st.text_input("LR Status Remark", value=str(target_row.get('lr_status_remark', '')))
-                    if st.button("Commit and Sync Modifications"):
-                        patch_url = f"{BASE_API_ROUTE}?doc_number=eq.{target_doc}"
-                        payload = {"lr_current_status": new_status, "lr_status_remark": new_remark}
-                        requests.patch(patch_url, headers=HTTP_HEADERS, json=payload)
-                        
-                        st.session_state["auric_master_dataframe"].loc[st.session_state["auric_master_dataframe"]['doc_number'] == target_doc, 'lr_current_status'] = new_status
-                        st.success("Modifications saved directly to permanent audit clouds successfully.")
-                        st.rerun()
-                        
-                elif st.session_state.editor == "APP":
-                    st.subheader(f"Modify Order Approvals for {target_doc}")
-                    new_app_status = st.text_input("Order Approval Status", value=str(target_row.get('order_approval_status', '')))
-                    new_app_rem = st.text_area("Order Approval Remark", value=str(target_row.get('order_approval_remark', '')))
-                    if st.button("Commit and Log Milestones"):
-                        patch_url = f"{BASE_API_ROUTE}?doc_number=eq.{target_doc}"
-                        payload = {"order_approval_status": new_app_status, "order_approval_remark": new_app_rem}
-                        requests.patch(patch_url, headers=HTTP_HEADERS, json=payload)
-                        
-                        st.session_state["auric_master_dataframe"].loc[st.session_state["auric_master_dataframe"]['doc_number'] == target_doc, 'order_approval_status'] = new_app_status
-                        st.success("Milestone indicator logged into live tracking grids.")
-                        st.rerun()
-
-# --- HIGH-SPEED INGESTION IN-MEMORY PROCESSOR PANEL ---
-st.markdown("---")
-st.markdown("### 📥 Bulk Processing Upload Panel")
-if "Edit" in user_rules["rights"]:
-    st.caption("Processing mode locked to: In-Memory High-Density Realtime Parsing Ingestion Matrix Engine")
-    uploaded_file = st.file_uploader("Drop your Auric Master Workbook spreadsheet here to execute bulk processing instantly:", type=["xlsx"])
-    
+    uploaded_file = st.file_uploader("Upload Master Workbook Sheet (.xlsx)", type=["xlsx"])
     if uploaded_file:
         try:
-            with st.spinner("Decoding layout lines matrix..."):
+            with st.spinner("Analyzing and parsing rows structure..."):
                 excel_df = pd.read_excel(uploaded_file, header=2)
             
             excel_df.columns = [str(c).strip().lower().replace('.', '').replace(' ', '_') for c in excel_df.columns]
             
-            col_translations = {
+            # Simple direct labels vocabulary mapper definitions
+            translations = {
                 'party_type': ['party_type', 'partytype'],
                 'doc_number': ['doc_number', 'doc_no', 'document_number', 'document_no'],
                 'doc_date': ['doc_date', 'date', 'document_date'],
@@ -265,14 +103,15 @@ if "Edit" in user_rules["rights"]:
                 'party_state': ['party_state', 'state', 'partystate'],
                 'doc_net_value': ['doc_net_value', 'bill_net_value', 'net_value'],
                 'lr_number': ['lr_number', 'lr_no', 'lrnumber'],
-                'final_lr_date': ['final_lr_date', 'lrdate(pickupdt)', 'lr_date', 'temp_lr_date']
+                'final_lr_date': ['final_lr_date', 'lrdate(pickupdt)', 'lr_date', 'temp_lr_date'],
+                'lr_current_status': ['lr_current_status', 'current_status'],
+                'order_approval_status': ['order_approval_status', 'approval_status']
             }
             
             final_mapped_df = pd.DataFrame()
-            for db_field, potential_matches in col_translations.items():
-                matched_col = next((c for c in excel_df.columns if c in potential_matches or any(pm in c for pm in potential_matches)), None)
-                if matched_col:
-                    final_mapped_df[db_field] = excel_df[matched_col]
+            for db_field, sample_matches in translations.items():
+                matched_col = next((c for c in excel_df.columns if c in sample_matches or any(sm in c for sm in sample_matches)), None)
+                if matched_col: final_mapped_df[db_field] = excel_df[matched_col]
             
             if 'doc_number' not in final_mapped_df.columns and len(excel_df.columns) > 1:
                 final_mapped_df['doc_number'] = excel_df.iloc[:, 1]
@@ -280,66 +119,145 @@ if "Edit" in user_rules["rights"]:
                 final_mapped_df['party_name'] = excel_df.iloc[:, 5]
                 
             final_mapped_df = final_mapped_df.dropna(subset=['doc_number'])
-            total_extracted = len(final_mapped_df)
             
-            if total_extracted > 0:
+            if len(final_mapped_df) > 0:
                 sanitized_rows = []
                 for _, row in final_mapped_df.iterrows():
                     rd = row.to_dict()
-                    cleaned_row = {}
-                    for k, v in rd.items():
-                        if pd.isna(v) or str(v).strip().lower() in ['nan', 'nat', '#ref!', '#value!']:
-                            cleaned_row[k] = None
-                        elif hasattr(v, 'strftime'):
-                            cleaned_row[k] = v.strftime('%Y-%m-%d')
-                        else:
-                            if k == 'doc_net_value':
-                                try: cleaned_row[k] = float(v)
-                                except: cleaned_row[k] = 0.0
-                            else:
-                                cleaned_row[k] = str(v).strip()
+                    cleaned_row = {k: (None if pd.isna(v) or str(v).strip().lower() in ['nan', 'nat'] else str(v).strip()) for k, v in rd.items()}
+                    if 'doc_net_value' in cleaned_row and cleaned_row['doc_net_value']:
+                        try: cleaned_row['doc_net_value'] = float(cleaned_row['doc_net_value'])
+                        except: cleaned_row['doc_net_value'] = 0.0
                     sanitized_rows.append(cleaned_row)
                 
                 st.session_state["auric_master_dataframe"] = pd.DataFrame(sanitized_rows)
-                st.success(f"🎉 Success! Completely loaded {total_extracted} records rows directly into application memory spaces.")
+                st.success(f"🎉 Success! Completely loaded {len(final_mapped_df)} tracking entries into the active grid canvas.")
                 st.rerun()
-            else:
-                st.error("Structure check failed: Data values are blank inside the targeted invoice rows.")
-        except Exception as err:
-            st.error(f"Memory System Ingestion Matrix Exception: {err}")
-with st.sidebar:
-    st.header("⚙️ System Management Controls")
-    if current_user != "admin_master":
-        st.warning("🔒 Administrative panels are locked for restricted profiles.")
-    else:
-        setting_tab = st.radio("System Control Panel Tabs", ["Dynamic User Creation", "Link Multiple APIs"])
-        if setting_tab == "Dynamic User Creation":
-            st.markdown("#### 👤 Setup Customized Access Role")
-            new_role_name = st.text_input("Role Custom Name", placeholder="e.g., west_warehouse")
-            map_parties = st.multiselect("Assign Selected Parties", options=["All"] + (df['party_name'].dropna().unique().tolist() if not df.empty and 'party_name' in df.columns else []))
-            map_types = st.multiselect("Restrict to Party-Types", options=df['party_type'].dropna().unique().tolist() if not df.empty and 'party_type' in df.columns else ["Distributor", "Vendor"])
-            map_states = st.multiselect("Restrict to States", options=df['party_state'].dropna().unique().tolist() if not df.empty and 'party_state' in df.columns else [])
+        except Exception as e:
+            st.error(f"Error reading spreadsheet file layout: {e}")
+
+# --- SCREEN 2: THE ACTIVE USER-FRIENDLY DASHBOARD CANVAS ---
+else:
+    # 1. VISUAL enterprise key-performance indicators summary metrics bar
+    st.markdown("### 📊 Live Operations Summary")
+    stat_col1, stat_col2, stat_col3, stat_col4 = st.columns(4)
+    
+    total_count = len(df)
+    kerala_count = len(df[df['party_state'].astype(str).str.upper() == 'KERALA']) if 'party_state' in df.columns else 0
+    pending_delivery = len(df[df['lr_current_status'].astype(str).str.lower().str.contains('pending|transit', na=False)]) if 'lr_current_status' in df.columns else 0
+    approved_orders = len(df[df['order_approval_status'].astype(str).str.lower().str.contains('approve|done', na=False)]) if 'order_approval_status' in df.columns else total_count
+    
+    with stat_col1:
+        st.markdown(f'<div class="metric-card"><div class="metric-val">{total_count}</div><div class="metric-lbl">Total Logged Shipments</div></div>', unsafe_allow_html=True)
+    with stat_col2:
+        st.markdown(f'<div class="metric-card"><div class="metric-val">{pending_delivery}</div><div class="metric-lbl">In-Transit / Pending Delivery</div></div>', unsafe_allow_html=True)
+    with stat_col3:
+        st.markdown(f'<div class="metric-card"><div class="metric-val">{approved_orders}</div><div class="metric-lbl">Approved Order Handshakes</div></div>', unsafe_allow_html=True)
+    with stat_col4:
+        st.markdown(f'<div class="metric-card"><div class="metric-val">{kerala_count}</div><div class="metric-lbl">Active Kerala Nodes</div></div>', unsafe_allow_html=True)
+
+    # Simulated regional user profiles logic routing to simplify dashboard clutter
+    if active_profile == "Restricted Regional User" and 'party_state' in df.columns:
+        df = df[df['party_state'].astype(str).str.upper() == 'KERALA']
+
+    # 2. INTUITIVE SIMPLIFIED FILTER CONTROLS BAR LAYOUT
+    st.markdown("### 🔍 Search and Filter Tools")
+    search_col1, search_col2, search_col3 = st.columns([2, 1, 1])
+    
+    with search_col1:
+        global_search = st.text_input("💡 Quick Global Search Box:", "", placeholder="Type any Invoice Number, Client Name, or LR Code here...")
+    with search_col2:
+        state_filter = st.selectbox("Filter by State Zone:", ["All States"] + sorted(df['party_state'].dropna().unique().tolist()) if 'party_state' in df.columns else ["All States"])
+    with search_col3:
+        type_filter = st.selectbox("Filter by Channel Partner:", ["All Types"] + sorted(df['party_type'].dropna().unique().tolist()) if 'party_type' in df.columns else ["All Types"])
+
+    # Apply search filter reductions
+    f_df = df.copy()
+    if global_search:
+        search_lower = global_search.lower()
+        mask = pd.Series(False, index=f_df.index)
+        for check_field in ['doc_number', 'party_name', 'lr_number', 'consignee_name']:
+            if check_field in f_df.columns:
+                mask = mask | f_df[check_field].astype(str).str.lower().str.contains(search_lower, na=False)
+        f_df = f_df[mask]
+
+    if state_filter != "All States" and 'party_state' in f_df.columns:
+        f_df = f_df[f_df['party_state'] == state_filter]
+    if type_filter != "All Types" and 'party_type' in f_df.columns:
+        f_df = f_df[f_df['party_type'] == type_filter]
+
+    # 3. HIGH-DENSITY PAGINATION NAVIGATION HUB SPLICER BLOCK
+    ROWS_PER_PAGE = 100
+    total_filtered = len(f_df)
+    max_pages = max(1, ((total_filtered - 1) // ROWS_PER_PAGE) + 1)
+    
+    st.markdown("---")
+    nav_col1, nav_col2 = st.columns([3, 1])
+    with nav_col1:
+        current_page = st.selectbox(
+            "📖 Viewing Page Range Index:",
+            options=range(1, max_pages + 1),
+            format_func=lambda x: f"Showing rows {(x-1)*ROWS_PER_PAGE + 1} to {min(x*ROWS_PER_PAGE, total_filtered)} (Page {x} of {max_pages})"
+        )
+    with nav_col2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        # Clean data report export features
+        csv_buffer = f_df.to_csv(index=False).encode('utf-8')
+        st.download_button(label="📥 Export Report to CSV", data=csv_buffer, file_name="auric_filtered_manifest.csv", mime="text/csv")
+
+    # Slice the filtered data frame to exact index segments coordinates
+    start_offset = (current_page - 1) * ROWS_PER_PAGE
+    paginated_slice_df = f_df.iloc[start_offset:start_offset + ROWS_PER_PAGE]
+
+    # 4. STREAMLINED CLEAN OPERATIONS VIEW DATA DATAGRID
+    user_friendly_headers_map = {
+        'consignee_name': 'Consignee Client Name',
+        'party_name': 'Registered Party Name',
+        'party_code': 'Party Code String',
+        'party_type': 'Channel Category',
+        'doc_number': 'Invoice / Doc Number',
+        'doc_date': 'Billing Date',
+        'doc_net_value': 'Net Value Amount (INR)',
+        'lr_number': 'LR Courier Tracking Code',
+        'final_lr_date': 'Dispatch Manifest Date',
+        'lr_current_status': 'Live Courier Status Zone'
+    }
+    
+    display_df = paginated_slice_df.rename(columns=user_friendly_headers_map)
+    visible_cols = [user_friendly_headers_map[c] for c in user_friendly_headers_map.keys() if user_friendly_headers_map[c] in display_df.columns]
+    
+    if not visible_cols: visible_cols = display_df.columns.tolist()
+    st.dataframe(display_df[visible_cols], use_container_width=True, hide_index=True)
+
+    # 5. SINGLE-CLICK MANUAL FIELDS UPDATE FORM MODULE DRAWER
+    st.markdown("---")
+    st.markdown("### 📝 Quick Row Modification Action Box")
+    
+    if 'doc_number' in f_df.columns:
+        target_selection = st.selectbox("Select a Document Number to quickly edit field columns data metrics:", ["-- Dropdown Selection List --"] + paginated_slice_df['doc_number'].tolist())
+        
+        if target_selection != "-- Dropdown Selection List --":
+            target_data_row = paginated_slice_df[paginated_slice_df['doc_number'] == target_selection].iloc[0]
             
-            r_view = st.checkbox("Enable Records Viewing", value=True)
-            r_edit = st.checkbox("Enable Cells Modification", value=False)
-            r_down = st.checkbox("Enable Spreadsheet Exporting", value=False)
-            
-            if st.button("Commit New User Role Settings"):
-                if new_role_name:
-                    rights_list = []
-                    if r_view: rights_list.append("View")
-                    if r_edit: rights_list.append("Edit")
-                    if r_down: rights_list.append("Download")
-                    st.session_state["user_roles_db"][new_role_name] = {
-                        "allowed_parties": "All" if "All" in map_parties or not map_parties else map_parties,
-                        "allowed_types": map_types if map_types else "All",
-                        "allowed_states": map_states if map_states else "All",
-                        "rights": rights_list
-                    }
-                    st.success(f"Custom user type role '{new_role_name}' generated successfully.")
+            form_col1, form_col2 = st.columns(2)
+            with form_col1:
+                updated_status_str = st.text_input("Update Live Courier Status Value:", value=str(target_data_row.get('lr_current_status', 'In Transit')))
+            with form_col2:
+                updated_remarks_str = st.text_input("Add Tracking Status Internal Remark Line:", value=str(target_data_row.get('lr_status_remark', '')))
+                
+            if st.button("Save Changes and Sync Back to Master Records"):
+                with st.spinner("Pushing variables straight to server configurations databases..."):
+                    patch_endpoint_target = f"{BASE_API_ROUTE}?doc_number=eq.{target_selection}"
+                    update_payload_object = {"lr_current_status": updated_status_str, "lr_status_remark": updated_remarks_str}
+                    requests.patch(patch_endpoint_target, headers=HTTP_HEADERS, json=update_payload_object)
+                    
+                    # Apply edit values seamlessly inside the fast memory session cache indices lines arrays
+                    st.session_state["auric_master_dataframe"].loc[st.session_state["auric_master_dataframe"]['doc_number'] == target_selection, 'lr_current_status'] = updated_status_str
+                    st.toast("Record parameters updated and synchronized successfully!")
                     st.rerun()
-        elif setting_tab == "Link Multiple APIs":
-            st.markdown("#### 🔑 Global Carrier Gateway Vault")
-            st.text_input("Bluedart Webhook Link Token", type="password", value="AURIC_BLUEDART_PRODUCTION_TOKEN")
-            st.text_input("DTDC Webhook Link Token", type="password", value="AURIC_DTDC_PRODUCTION_TOKEN")
-            st.button("Synchronize Carrier Links")
+    
+    # 6. RESET GATEWAY BUTTON
+    st.markdown("<br><br><br>", unsafe_allow_html=True)
+    if st.button("🔄 Reset Portal and Ingest New Sheet Version File"):
+        st.session_state["auric_master_dataframe"] = pd.DataFrame()
+        st.rerun()
