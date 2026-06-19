@@ -4,7 +4,7 @@ from supabase import create_client, Client
 
 st.set_page_config(page_title="Auric Control Hub v4.0", layout="wide")
 
-# Initialize native clean connection directly to secure database cloud
+# Natively initialize cloud database connection pipeline
 @st.cache_resource
 def init_supabase():
     url = st.secrets["connections"]["supabase"]["supabase_url"]
@@ -14,16 +14,15 @@ def init_supabase():
 try:
     supabase: Client = init_supabase()
 except Exception as e:
-    st.error("Database handshake failed. Please check your variables inside Streamlit Cloud Secrets box configuration.")
+    st.error(f"Database handshake failed: {e}. Please check your variables inside Streamlit Cloud Secrets box configuration.")
     st.stop()
 
-# Load dynamic data fields directly out of live table rows
+# Load Data rows from active Supabase table
 def load_db_data():
     try:
         response = supabase.table("shipments").select("*").execute()
         return pd.DataFrame(response.data)
     except Exception as e:
-        st.warning("Could not read records table. Ensure your Supabase table is built using the SQL Editor.")
         return pd.DataFrame()
 
 # Initialize localized state permissions data map variables if empty
@@ -71,9 +70,9 @@ with st.sidebar:
             st.markdown("#### 👤 Setup Customized Access Role")
             new_role_name = st.text_input("Role Custom Name", placeholder="e.g., west_warehouse_restricted")
             
-            map_parties = st.multiselect("Assign Selected Parties (Empty for All)", options=["All"] + (df['party_name'].dropna().unique().tolist() if not df.empty else []))
-            map_types = st.multiselect("Restrict to Selected Party-Types", options=df['party_type'].dropna().unique().tolist() if not df.empty else ["Distributor", "Vendor", "Warehouse"])
-            map_states = st.multiselect("Restrict to Selected States", options=df['party_state'].dropna().unique().tolist() if not df.empty else [])
+            map_parties = st.multiselect("Assign Selected Parties (Empty for All)", options=["All"] + (df['party_name'].dropna().unique().tolist() if not df.empty and 'party_name' in df.columns else []))
+            map_types = st.multiselect("Restrict to Selected Party-Types", options=df['party_type'].dropna().unique().tolist() if not df.empty and 'party_type' in df.columns else ["Distributor", "Vendor", "Warehouse"])
+            map_states = st.multiselect("Restrict to Selected States", options=df['party_state'].dropna().unique().tolist() if not df.empty and 'party_state' in df.columns else [])
             
             st.markdown("**Functional Scope Properties:**")
             r_view = st.checkbox("Enable Records Viewing", value=True)
@@ -112,9 +111,9 @@ if df.empty:
 else:
     # STEP 1: EXECUTE SEGMENT FILTER RULES AGAINST CURRENT LOGGED USER ACCESS PROFILE
     if current_user != "admin_master":
-        if user_rules["allowed_parties"] != "All": df = df[df['party_name'].isin(user_rules["allowed_parties"])]
-        if user_rules["allowed_types"] != "All": df = df[df['party_type'].isin(user_rules["allowed_types"])]
-        if user_rules["allowed_states"] != "All": df = df[df['party_state'].isin(user_rules["allowed_states"])]
+        if user_rules["allowed_parties"] != "All" and 'party_name' in df.columns: df = df[df['party_name'].isin(user_rules["allowed_parties"])]
+        if user_rules["allowed_types"] != "All" and 'party_type' in df.columns: df = df[df['party_type'].isin(user_rules["allowed_types"])]
+        if user_rules["allowed_states"] != "All" and 'party_state' in df.columns: df = df[df['party_state'].isin(user_rules["allowed_states"])]
 
     # STEP 2: RENDER DASHBOARD CRITERIA SEGMENT FILTERS
     st.markdown("### 🎛️ Active Dashboard Filters & Slicers")
@@ -122,13 +121,13 @@ else:
     with col1:
         search_q = st.text_input("🔍 Search box query (Doc Number / Party Name / LR Number)", "")
     with col2:
-        ptype = st.selectbox("Party-Type", ["All"] + df['party_type'].dropna().unique().tolist())
+        ptype = st.selectbox("Party-Type", ["All"] + df['party_type'].dropna().unique().tolist() if 'party_type' in df.columns else ["All"])
     with col3:
-        pstate = st.selectbox("State Zone", ["All"] + df['party_state'].dropna().unique().tolist())
+        pstate = st.selectbox("State Zone", ["All"] + df['party_state'].dropna().unique().tolist() if 'party_state' in df.columns else ["All"])
     with col4:
-        pname = st.selectbox("Party Name Selector", ["All"] + df['party_name'].dropna().unique().tolist())
+        pname = st.selectbox("Party Name Selector", ["All"] + df['party_name'].dropna().unique().tolist() if 'party_name' in df.columns else ["All"])
     with col5:
-        lrs = st.selectbox("LR-Final Status", ["All"] + df['lr_final_status'].dropna().unique().tolist())
+        lrs = st.selectbox("LR-Final Status", ["All"] + df['lr_final_status'].dropna().unique().tolist() if 'lr_final_status' in df.columns else ["All"])
 
     # Execute search row mappings queries
     f_df = df.copy()
@@ -214,53 +213,65 @@ else:
     uploaded_file = st.file_uploader("Drop master version 4.0 spreadsheet here to execute bulk processing logs:", type=["xlsx"])
     
     if uploaded_file:
-        # Load excel ignoring multi-level visual top header layers cleanly
-        excel_df = pd.read_excel(uploaded_file, sheet_name="Master File1", header=2)
-        
-        # Clean naming mapping translations dictionary to safely bridge Excel headers to database fields
-        rename_map = {
-            'Party Type': 'party_type', 'Doc Number': 'doc_number', 'Doc Date': 'doc_date', 'Doc Type': 'doc_type',
-            'Consignee Name': 'consignee_name', 'Party Name': 'party_name', 'Party Code': 'party_code', 'Party Group': 'party_group',
-            'Party City': 'party_city', 'Party State': 'party_state', 'Party Order No.': 'party_order_no', 'Party Order Date': 'party_order_date',
-            'Doc Qty': 'doc_qty', 'Doc Free Qty': 'doc_free_qty', 'Doc Net Value': 'doc_net_value', 'Doc Eway bill number': 'doc_eway_bill_number',
-            'Doc Eway bill Date': 'doc_eway_bill_date', 'Doc Remark': 'doc_remark', 'LR Number': 'lr_number', 'Temp LR Date': 'temp_lr_date',
-            'Temp Courier Name': 'temp_courier_name', 'Courier Vendor': 'courier_vendor', 'Final Courier name': 'final_courier_name',
-            'Dispatch Mode': 'dispatch_mode', 'Final LR Date': 'final_lr_date', 'Number of Boxes': 'number_of_boxes', 'Weight': 'weight',
-            'LR Status Date': 'lr_status_date', 'LR Current Status': 'lr_current_status', 'LR Status Remark': 'lr_status_remark',
-            'LR Final Date of Delivery': 'lr_final_date_of_delivery', 'LR Expected date of Delivery': 'lr_expected_date_of_delivery',
-            'LR Final Status': 'lr_final_status', 'LR Final Status Updation Date Time': 'lr_final_status_updation_date_time',
-            'Auto Status Date': 'auto_status_date', 'Auto Status': 'auto_status', 'Auto Status Remark': 'auto_status_remark',
-            'Auto Status Refresh Date Time': 'auto_status_refresh_date_time', 'Order Received Date time': 'order_received_date_time',
-            'Sales Approval Date time': 'sales_approval_date_time', 'Distributor Approval Date Time': 'distributor_approval_date_time',
-            'Order Approval Status': 'order_approval_status', 'Order Approval Remark': 'order_approval_remark'
-        }
-        
-        excel_df = excel_df.rename(columns=rename_map)
-        # Drop unmapped or blank row rows to clean processing arrays
-        excel_df = excel_df.dropna(subset=['doc_number'])
-        
-        records_pushed = 0
-        
-        for _, row in excel_df.iterrows():
-            row_data = row.to_dict()
-            # Clean floating/timestamp structures to string fields for flat database compatibility
-            for k, v in row_data.items():
-                if pd.isna(v): row_data[k] = None
-                elif hasattr(v, 'strftime'): row_data[k] = v.strftime('%Y-%m-%d %H:%M:%S')
-                else: row_data[k] = str(v) if k not in ['doc_qty', 'doc_free_qty', 'number_of_boxes', 'bill_qty', 'free_qty', 'cases'] else int(float(v)) if v else 0
-
-            try:
-                if upload_mode == "Bulk Ingest Fresh Orders":
-                    supabase.table("shipments").upsert(row_data).execute()
-                elif upload_mode == "Bulk Update LR Section Only":
-                    lr_patch = {k: row_data[k] for k in ['lr_number', 'final_lr_date', 'lr_current_status', 'lr_status_remark'] if k in row_data}
-                    supabase.table("shipments").update(lr_patch).eq("doc_number", row_data['doc_number']).execute()
-                elif upload_mode == "Bulk Update Approvals Details Only":
-                    app_patch = {k: row_data[k] for k in ['order_approval_status', 'order_approval_remark', 'distributor_approval_date_time'] if k in row_data}
-                    supabase.table("shipments").update(app_patch).eq("doc_number", row_data['doc_number']).execute()
-                records_pushed += 1
-            except Exception as e:
-                continue
+        try:
+            excel_df = pd.read_excel(uploaded_file, sheet_name="Master File1", header=2)
+            
+            rename_map = {
+                'Party Type': 'party_type', 'Doc Number': 'doc_number', 'Doc Date': 'doc_date', 'Doc Type': 'doc_type',
+                'Consignee Name': 'consignee_name', 'Party Name': 'party_name', 'Party Code': 'party_code', 'Party Group': 'party_group',
+                'Party City': 'party_city', 'Party State': 'party_state', 'Party Order No.': 'party_order_no', 'Party Order Date': 'party_order_date',
+                'Doc Qty': 'doc_qty', 'Doc Free Qty': 'doc_free_qty', 'Doc Net Value': 'doc_net_value', 'Doc Eway bill number': 'doc_eway_bill_number',
+                'Doc Eway bill Date': 'doc_eway_bill_date', 'Doc Remark': 'doc_remark', 'LR Number': 'lr_number', 'Temp LR Date': 'temp_lr_date',
+                'Temp Courier Name': 'temp_courier_name', 'Courier Vendor': 'courier_vendor', 'Final Courier name': 'final_courier_name',
+                'Dispatch Mode': 'dispatch_mode', 'Final LR Date': 'final_lr_date', 'Number of Boxes': 'number_of_boxes', 'Weight': 'weight',
+                'LR Status Date': 'lr_status_date', 'LR Current Status': 'lr_current_status', 'LR Status Remark': 'lr_status_remark',
+                'LR Final Date of Delivery': 'lr_final_date_of_delivery', 'LR Expected date of Delivery': 'lr_expected_date_of_delivery',
+                'LR Final Status': 'lr_final_status', 'LR Final Status Updation Date Time': 'lr_final_status_updation_date_time',
+                'Auto Status Date': 'auto_status_date', 'Auto Status': 'auto_status', 'Auto Status Remark': 'auto_status_remark',
+                'Auto Status Refresh Date Time': 'auto_status_refresh_date_time', 'Order Received Date time': 'order_received_date_time',
+                'Sales Approval Date time': 'sales_approval_date_time', 'Distributor Approval Date Time': 'distributor_approval_date_time',
+                'Order Approval Status': 'order_approval_status', 'Order Approval Remark': 'order_approval_remark'
+            }
+            
+            excel_df = excel_df.rename(columns=rename_map)
+            if 'doc_number' in excel_df.columns:
+                excel_df = excel_df.dropna(subset=['doc_number'])
+                records_pushed = 0
                 
-        st.success(f"🎉 Success! Processed and synchronized {records_pushed} records to the Live Cloud Database.")
-        st.button("🔄 Refresh Application Dashboard Grid")
+                for _, row in excel_df.iterrows():
+                    row_data = row.to_dict()
+                    cleaned_data = {}
+                    # Guard structure to sanitize data formats natively before inserting
+                    for k, v in row_data.items():
+                        if pd.isna(v) or str(v).strip().lower() in ['nan', 'nat', '#ref!', '#value!']:
+                            cleaned_data[k] = None
+                        elif hasattr(v, 'strftime'):
+                            cleaned_data[k] = v.strftime('%Y-%m-%d %H:%M:%S')
+                        else:
+                            if k in ['doc_qty', 'doc_free_qty', 'number_of_boxes', 'cases']:
+                                try: cleaned_data[k] = int(float(v))
+                                catch: cleaned_data[k] = 0
+                            elif k in ['doc_net_value', 'weight']:
+                                try: cleaned_data[k] = float(v)
+                                catch: cleaned_data[k] = 0.0
+                            else:
+                                cleaned_data[k] = str(v).replace('`', '').strip()
+
+                    try:
+                        if upload_mode == "Bulk Ingest Fresh Orders":
+                            supabase.table("shipments").upsert(cleaned_data).execute()
+                        elif upload_mode == "Bulk Update LR Section Only" and cleaned_data.get('doc_number'):
+                            lr_fields = {x: cleaned_data[x] for x in ['lr_number', 'final_lr_date', 'lr_current_status', 'lr_status_remark'] if x in cleaned_data}
+                            supabase.table("shipments").update(lr_fields).eq("doc_number", cleaned_data['doc_number']).execute()
+                        elif upload_mode == "Bulk Update Approvals Details Only" and cleaned_data.get('doc_number'):
+                            app_fields = {x: cleaned_data[x] for x in ['order_approval_status', 'order_approval_remark', 'distributor_approval_date_time'] if x in cleaned_data}
+                            supabase.table("shipments").update(app_fields).eq("doc_number", cleaned_data['doc_number']).execute()
+                        records_pushed += 1
+                    except Exception:
+                        continue
+                st.success(f"🎉 Success! Synchronized {records_pushed} records to the Cloud Database.")
+                st.button("🔄 Refresh Main Tracker View")
+            else:
+                st.error("Column match failed. Ensure the uploaded spreadsheet contains a valid 'Doc Number' column header.")
+        except Exception as file_err:
+            st.error(f"Error parsing workbook: {file_err}")
