@@ -154,6 +154,77 @@ if "Edit" in user_rules["rights"]:
             
             for test_header in [2, 1, 0, 3]:
                 test_df = pd.read_excel(uploaded_file, sheet_name=target_sheet, header=test_header)
-                # Check if any column contains words like Doc Number or Party Type
                 col_sample = " ".join([str(x).lower() for x in test_df.columns])
-                if "doc"
+                if "doc" in col_sample or "party" in col_sample or "number" in col_sample or "consignee" in col_sample:
+                    excel_df = test_df
+                    parsed_successfully = True
+                    break
+            
+            if parsed_successfully and not excel_df.empty:
+                excel_df.columns = [str(c).strip().lower().replace('.', '').replace(' ', '_') for c in excel_df.columns]
+                
+                # Dynamic matching framework translations
+                col_translations = {
+                    'party_type': ['party_type', 'partytype'],
+                    'doc_number': ['doc_number', 'doc_no', 'document_number', 'doc_number', 'document_no'],
+                    'doc_date': ['doc_date', 'date', 'document_date'],
+                    'consignee_name': ['consignee_name', 'consignee'],
+                    'party_name': ['party_name', 'party'],
+                    'party_code': ['party_code', 'partycode'],
+                    'party_state': ['party_state', 'state', 'partystate'],
+                    'doc_net_value': ['doc_net_value', 'bill_net_value', 'net_value'],
+                    'lr_number': ['lr_number', 'lr_no', 'lrnumber'],
+                    'final_lr_date': ['final_lr_date', 'lrdate(pickupdt)', 'lr_date']
+                }
+                
+                final_mapped_df = pd.DataFrame()
+                for db_field, potential_matches in col_translations.items():
+                    matched_col = next((c for c in excel_df.columns if c in potential_matches or any(pm in c for pm in potential_matches)), None)
+                    if matched_col:
+                        final_mapped_df[db_field] = excel_df[matched_col]
+                
+                # Check for position index drop-backs if text strings miss matches entirely
+                if 'doc_number' not in final_mapped_df.columns and len(excel_df.columns) > 1:
+                    final_mapped_df['doc_number'] = excel_df.iloc[:, 1]
+                if 'party_name' not in final_mapped_df.columns and len(excel_df.columns) > 5:
+                    final_mapped_df['party_name'] = excel_df.iloc[:, 5]
+                
+                final_mapped_df = final_mapped_df.dropna(subset=['doc_number'])
+                total_extracted = len(final_mapped_df)
+                
+                if total_extracted > 0:
+                    st.info(f"⚡ Ingesting {total_extracted} entries from sheet tab '{target_sheet}'...")
+                    batch_container = []
+                    
+                    for _, row in final_mapped_df.iterrows():
+                        row_dict = row.to_dict()
+                        cleaned_data = {}
+                        for k, v in row_dict.items():
+                            if pd.isna(v) or str(v).strip().lower() in ['nan', 'nat', '#ref!', '#value!', '00/01/1900']:
+                                cleaned_data[k] = None
+                            elif hasattr(v, 'strftime'):
+                                cleaned_data[k] = v.strftime('%Y-%m-%d')
+                            else:
+                                if k == 'doc_net_value':
+                                    try: cleaned_data[k] = float(v)
+                                    except: cleaned_data[k] = 0.0
+                                else:
+                                    cleaned_data[k] = str(v).strip()
+                        batch_container.append(cleaned_data)
+                    
+                    BATCH_SIZE = 100
+                    success_count = 0
+                    for i in range(0, len(batch_container), BATCH_SIZE):
+                        chunk = batch_container[i:i + BATCH_SIZE]
+                        if upload_mode == "Bulk Ingest Fresh Orders":
+                            supabase.table("shipments").upsert(chunk).execute()
+                        success_count += len(chunk)
+                        
+                    st.success(f"🎉 Success! Synchronized {success_count} rows across structural tables.")
+                    st.button("🔄 Reload App Grid")
+                else:
+                    st.error("No row matching indices extracted. Ensure your primary tracking cells contain records numbers.")
+            else:
+                st.error("Failed to detect shipment column structures inside this file. Please ensure your sheet columns contain text headers.")
+        except Exception as global_err:
+            st.error(f"Ingestion Exception: {global_err}")
