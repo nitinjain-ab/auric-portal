@@ -5,6 +5,74 @@ import json
 
 st.set_page_config(page_title="Auric Control Hub v4.0", layout="wide")
 
+# --- NATIVE PREMIUM AURIC BEAUTY THEMING COLORS CONFIG ---
+st.markdown(
+    """
+    <style>
+    /* Global Background and Canvas Settings */
+    .stApp {
+        background-color: #0F1216;
+        color: #E2E8F0;
+    }
+    
+    /* Main Headers Branding */
+    h1 {
+        color: #D4AF37 !important;
+        font-family: 'Playfair Display', serif;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+    }
+    
+    h3 {
+        color: #E5C158 !important;
+        border-bottom: 1px solid #2D3748;
+        padding-bottom: 8px;
+    }
+    
+    /* Sidebar Configuration Styling */
+    section[data-testid="stSidebar"] {
+        background-color: #161B22 !important;
+        border-right: 1px solid #2D3748;
+    }
+    
+    /* Input Fields and Slicers Control Boxes */
+    div[data-testid="stHeader"] {
+        background-color: rgba(15, 18, 22, 0.6);
+    }
+    
+    div[data-baseweb="select"], div[data-baseweb="input"] {
+        background-color: #1A202C !important;
+        border: 1px solid #D4AF37 !important;
+        border-radius: 6px !important;
+    }
+    
+    /* Custom Alert Container Cards */
+    .stAlert {
+        background-color: #1E232A !important;
+        border-left: 5px solid #D4AF37 !important;
+        color: #E2E8F0 !important;
+    }
+    
+    /* Premium Brand Buttons */
+    .stButton>button {
+        background: linear-gradient(135deg, #D4AF37 0%, #AA7C11 100%) !important;
+        color: #0F1216 !important;
+        font-weight: 600 !important;
+        border: none !important;
+        border-radius: 6px !important;
+        transition: all 0.3s ease;
+    }
+    
+    .stButton>button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(212, 175, 55, 0.3);
+    }
+    
+    div.block-container { padding-top: 1.5rem; }
+    </style>
+    """, unsafe_allow_html=True
+)
+
 # Fetch clean credentials directly from your secrets box configuration layers
 try:
     SUPABASE_URL = st.secrets["connections"]["supabase"]["supabase_url"].strip().rstrip('/')
@@ -36,13 +104,10 @@ if "current_logged_user" not in st.session_state:
 
 df = st.session_state["auric_master_dataframe"]
 
-# Clean styling markup injection
-st.markdown("<style>div.block-container{padding-top:1rem;}</style>", unsafe_allow_html=True)
-
 app_col1, app_col2 = st.columns([3, 1])
 with app_col1:
-    st.title("Auric Dispatch Master Control Board")
-    st.caption("Ver 4.0 Core Dashboard Engine • Hybrid High-Speed Memory Architecture")
+    st.title("✨ Auric Dispatch Master Control Board")
+    st.caption("Ver 4.0 Luxury Enterprise Dashboard Engine • High-Density Color Palette Setup")
 with app_col2:
     user_options = list(st.session_state["user_roles_db"].keys())
     st.session_state["current_logged_user"] = st.selectbox(
@@ -59,9 +124,14 @@ if "View" not in user_rules["rights"]:
 
 # --- DISPLAY CANVAS OR INGESTION PLACEHOLDER ---
 if df.empty:
-    st.warning("⚠️ High-Speed Operational Memory Active: Please upload your master Excel file in the processing panel below to instantly populate your dashboard grid canvas.")
+    st.markdown(
+        """
+        <div style="background-color: #1E232A; padding: 20px; border-left: 5px solid #D4AF37; border-radius: 4px;">
+            <p style="color: #E2E8F0; margin: 0; font-weight: 500;">⚠️ High-Speed Operational Memory Active: Please upload your master Excel file in the processing panel below to instantly populate your dashboard grid canvas.</p>
+        </div>
+        """, unsafe_allow_html=True
+    )
 else:
-    # Row filters matrix execution guard checks
     if current_user != "admin_master":
         if user_rules["allowed_parties"] != "All" and 'party_name' in df.columns: df = df[df['party_name'].isin(user_rules["allowed_parties"])]
         if user_rules["allowed_types"] != "All" and 'party_type' in df.columns: df = df[df['party_type'].isin(user_rules["allowed_types"])]
@@ -94,17 +164,38 @@ else:
     if pstate != "All" and 'party_state' in f_df.columns: f_df = f_df[f_df['party_state'] == pstate]
     if pname != "All" and 'party_name' in f_df.columns: f_df = f_df[f_df['party_name'] == pname]
 
+    # --- PAGINATION COMPONENT ---
+    st.markdown("---")
+    total_filtered_rows = len(f_df)
+    ROWS_PER_PAGE = 100
+    total_pages = max(1, ((total_filtered_rows - 1) // ROWS_PER_PAGE) + 1)
+    
+    page_col1, page_col2, page_col3 = st.columns([1, 2, 1])
+    with page_col1:
+        st.write(f"📊 Total Records: **{total_filtered_rows}**")
+    with page_col2:
+        current_page = st.selectbox(
+            f"📖 Select Dashboard Page Block (Showing {ROWS_PER_PAGE} rows at a time):", 
+            options=range(1, total_pages + 1),
+            format_func=lambda x: f"Page {x} of {total_pages} (Rows {(x-1)*ROWS_PER_PAGE + 1} - {min(x*ROWS_PER_PAGE, total_filtered_rows)})"
+        )
+
+    start_idx = (current_page - 1) * ROWS_PER_PAGE
+    end_idx = start_idx + ROWS_PER_PAGE
+    paginated_df = f_df.iloc[start_idx:end_idx]
+
+    # --- DATAGRID DISPLAY WITH LIGHT/DARK CONTRAST INTERFACE ---
     st.markdown("### 📦 Active Shipments Log Manifest")
     ideal_cols = ['consignee_name', 'party_name', 'party_code', 'party_type', 'doc_number', 'doc_date', 'doc_net_value', 'lr_number', 'final_lr_date', 'lr_current_status', 'lr_status_date']
-    render_cols = [c for c in ideal_cols if c in f_df.columns]
+    render_cols = [c for c in ideal_cols if c in paginated_df.columns]
     if not render_cols:
-        render_cols = f_df.columns.tolist()
+        render_cols = paginated_df.columns.tolist()
         
-    st.dataframe(f_df[render_cols], use_container_width=True, hide_index=True)
+    st.dataframe(paginated_df[render_cols], use_container_width=True, hide_index=True)
 
     if "Download" in user_rules["rights"]:
         csv_buffer = f_df[render_cols].to_csv(index=False).encode('utf-8')
-        st.download_button(label="📥 Download Selected Entries as Matrix CSV Report", data=csv_buffer, file_name="auric_tracker_report.csv", mime="text/csv")
+        st.download_button(label="📥 Download ALL Filtered Entries as Matrix CSV Report", data=csv_buffer, file_name="auric_tracker_report.csv", mime="text/csv")
 
     # MANUAL LIVE-SYNC CLOUD ROW OPERATIONS DRAWER PANEL
     st.markdown("---")
@@ -112,11 +203,11 @@ else:
     if "Edit" not in user_rules["rights"]:
         st.error("🚫 Access Blocked: Your custom user type role does not hold cell modification properties.")
     elif 'doc_number' not in f_df.columns:
-        st.warning("Editing disabled: 'doc_number' key identifier coordinates missing from active layout dataset.")
+        st.warning("Editing disabled: 'doc_number' coordinate fields missing from active layout dataset.")
     else:
-        target_doc = st.selectbox("Choose a Doc Number to target edits:", ["-- None Selected --"] + f_df['doc_number'].tolist())
+        target_doc = st.selectbox("Choose a Doc Number to target edits:", ["-- None Selected --"] + paginated_df['doc_number'].tolist())
         if target_doc != "-- None Selected --":
-            target_row = f_df[f_df['doc_number'] == target_doc].iloc[0]
+            target_row = paginated_df[paginated_df['doc_number'] == target_doc].iloc[0]
             btn_col1, btn_col2 = st.columns(2)
             with btn_col1:
                 if st.button("📝 Form Section: LR Status Fields"): st.session_state.editor = "LR"
@@ -129,12 +220,10 @@ else:
                     new_status = st.text_input("LR Current Status", value=str(target_row.get('lr_current_status', '')))
                     new_remark = st.text_input("LR Status Remark", value=str(target_row.get('lr_status_remark', '')))
                     if st.button("Commit and Sync Modifications"):
-                        # Simultaneously sync to cloud fallback database structures for audit longevity logs
                         patch_url = f"{BASE_API_ROUTE}?doc_number=eq.{target_doc}"
                         payload = {"lr_current_status": new_status, "lr_status_remark": new_remark}
                         requests.patch(patch_url, headers=HTTP_HEADERS, json=payload)
                         
-                        # Apply change back into transaction memory stream fields immediately
                         st.session_state["auric_master_dataframe"].loc[st.session_state["auric_master_dataframe"]['doc_number'] == target_doc, 'lr_current_status'] = new_status
                         st.success("Modifications saved directly to permanent audit clouds successfully.")
                         st.rerun()
@@ -194,7 +283,6 @@ if "Edit" in user_rules["rights"]:
             total_extracted = len(final_mapped_df)
             
             if total_extracted > 0:
-                # Sanitize values natively inside application runtime storage
                 sanitized_rows = []
                 for _, row in final_mapped_df.iterrows():
                     rd = row.to_dict()
@@ -212,7 +300,6 @@ if "Edit" in user_rules["rights"]:
                                 cleaned_row[k] = str(v).strip()
                     sanitized_rows.append(cleaned_row)
                 
-                # Push cleaned dictionary structure directly to session memory
                 st.session_state["auric_master_dataframe"] = pd.DataFrame(sanitized_rows)
                 st.success(f"🎉 Success! Completely loaded {total_extracted} records rows directly into application memory spaces.")
                 st.rerun()
@@ -220,3 +307,39 @@ if "Edit" in user_rules["rights"]:
                 st.error("Structure check failed: Data values are blank inside the targeted invoice rows.")
         except Exception as err:
             st.error(f"Memory System Ingestion Matrix Exception: {err}")
+with st.sidebar:
+    st.header("⚙️ System Management Controls")
+    if current_user != "admin_master":
+        st.warning("🔒 Administrative panels are locked for restricted profiles.")
+    else:
+        setting_tab = st.radio("System Control Panel Tabs", ["Dynamic User Creation", "Link Multiple APIs"])
+        if setting_tab == "Dynamic User Creation":
+            st.markdown("#### 👤 Setup Customized Access Role")
+            new_role_name = st.text_input("Role Custom Name", placeholder="e.g., west_warehouse")
+            map_parties = st.multiselect("Assign Selected Parties", options=["All"] + (df['party_name'].dropna().unique().tolist() if not df.empty and 'party_name' in df.columns else []))
+            map_types = st.multiselect("Restrict to Party-Types", options=df['party_type'].dropna().unique().tolist() if not df.empty and 'party_type' in df.columns else ["Distributor", "Vendor"])
+            map_states = st.multiselect("Restrict to States", options=df['party_state'].dropna().unique().tolist() if not df.empty and 'party_state' in df.columns else [])
+            
+            r_view = st.checkbox("Enable Records Viewing", value=True)
+            r_edit = st.checkbox("Enable Cells Modification", value=False)
+            r_down = st.checkbox("Enable Spreadsheet Exporting", value=False)
+            
+            if st.button("Commit New User Role Settings"):
+                if new_role_name:
+                    rights_list = []
+                    if r_view: rights_list.append("View")
+                    if r_edit: rights_list.append("Edit")
+                    if r_down: rights_list.append("Download")
+                    st.session_state["user_roles_db"][new_role_name] = {
+                        "allowed_parties": "All" if "All" in map_parties or not map_parties else map_parties,
+                        "allowed_types": map_types if map_types else "All",
+                        "allowed_states": map_states if map_states else "All",
+                        "rights": rights_list
+                    }
+                    st.success(f"Custom user type role '{new_role_name}' generated successfully.")
+                    st.rerun()
+        elif setting_tab == "Link Multiple APIs":
+            st.markdown("#### 🔑 Global Carrier Gateway Vault")
+            st.text_input("Bluedart Webhook Link Token", type="password", value="AURIC_BLUEDART_PRODUCTION_TOKEN")
+            st.text_input("DTDC Webhook Link Token", type="password", value="AURIC_DTDC_PRODUCTION_TOKEN")
+            st.button("Synchronize Carrier Links")
