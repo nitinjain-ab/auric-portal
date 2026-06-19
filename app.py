@@ -241,7 +241,6 @@ else:
                 for _, row in excel_df.iterrows():
                     row_data = row.to_dict()
                     cleaned_data = {}
-                    # Guard structure to sanitize data formats natively before inserting
                     for k, v in row_data.items():
                         if pd.isna(v) or str(v).strip().lower() in ['nan', 'nat', '#ref!', '#value!']:
                             cleaned_data[k] = None
@@ -250,10 +249,10 @@ else:
                         else:
                             if k in ['doc_qty', 'doc_free_qty', 'number_of_boxes', 'cases']:
                                 try: cleaned_data[k] = int(float(v))
-                                catch: cleaned_data[k] = 0
+                                except: cleaned_data[k] = 0
                             elif k in ['doc_net_value', 'weight']:
                                 try: cleaned_data[k] = float(v)
-                                catch: cleaned_data[k] = 0.0
+                                except: cleaned_data[k] = 0.0
                             else:
                                 cleaned_data[k] = str(v).replace('`', '').strip()
 
