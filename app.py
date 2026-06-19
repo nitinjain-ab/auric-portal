@@ -192,7 +192,7 @@ else:
     with search_col2:
         state_filter = st.selectbox("Filter by State Zone:", ["All States"] + sorted(df['party_state'].dropna().unique().tolist()) if 'party_state' in df.columns else ["All States"])
     with search_col3:
-        type_filter = st.selectbox("Filter by Channel Partner:", ["All Types"] + sorted(df['party_type'].dropna().unique().tolist() if 'party_type' in df.columns else ["All Types"])
+        type_filter = st.selectbox("Filter by Channel Partner:", ["All Types"] + sorted(df['party_type'].dropna().unique().tolist()) if 'party_type' in df.columns else ["All Types"])
 
     f_df = df.copy()
     if global_search:
