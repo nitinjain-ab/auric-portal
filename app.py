@@ -202,7 +202,7 @@ else:
                         st.toast("Row Synced!")
                         st.rerun()
 
-# BULK SHEET INGESTION PANEL
+# BULK SHEET HIGH-SPEED BATCH INGESTION PANEL
 st.markdown("---")
 st.markdown("### 📥 Bulk Processing Upload Panel")
 if "Edit" not in user_rules["rights"]:
@@ -214,8 +214,8 @@ else:
     
     if uploaded_file:
         try:
-            st.info("Reading workbook columns layer maps...")
-            excel_df = pd.read_excel(uploaded_file, sheet_name="Master File1", header=2)
+            with st.spinner("Parsing workbook file metadata into systems layers..."):
+                excel_df = pd.read_excel(uploaded_file, sheet_name="Master File1", header=2)
             
             rename_map = {
                 'Party Type': 'party_type', 'Doc Number': 'doc_number', 'Doc Date': 'doc_date', 'Doc Type': 'doc_type',
@@ -236,16 +236,16 @@ else:
             
             excel_df = excel_df.rename(columns=rename_map)
             
-            # CRITICAL: Filter out any completely blank padding rows appended at the end of Excel file export
             if 'doc_number' in excel_df.columns:
                 excel_df = excel_df.dropna(subset=['doc_number'])
                 total_rows = len(excel_df)
                 
-                st.info(f"Database ingestion active. Synchronizing {total_rows} entries rows...")
-                progress_bar = st.progress(0)
-                records_pushed = 0
+                st.info(f"⚡ High-Speed Batch Ingestion Active. Processing {total_rows} rows into transmission memory chunks...")
                 
-                for idx, row in excel_df.iterrows():
+                batch_container = []
+                records_processed = 0
+                
+                for _, row in excel_df.iterrows():
                     row_data = row.to_dict()
                     cleaned_data = {}
                     for k, v in row_data.items():
@@ -262,28 +262,40 @@ else:
                                 except: cleaned_data[k] = 0.0
                             else:
                                 cleaned_data[k] = str(v).replace('`', '').strip()
-
+                    
+                    batch_container.append(cleaned_data)
+                
+                # --- HIGH SPEED BATCHING SPLITTER (Groups rows by sets of 200) ---
+                BATCH_SIZE = 200
+                success_count = 0
+                status_message = st.empty()
+                
+                for i in range(0, len(batch_container), BATCH_SIZE):
+                    chunk = batch_container[i:i + BATCH_SIZE]
+                    status_message.text(f"Pushing data segment chunk: Rows {i} to {min(i+BATCH_SIZE, len(batch_container))}...")
+                    
                     try:
                         if upload_mode == "Bulk Ingest Fresh Orders":
-                            supabase.table("shipments").upsert(cleaned_data).execute()
-                        elif upload_mode == "Bulk Update LR Section Only" and cleaned_data.get('doc_number'):
-                            lr_fields = {x: cleaned_data[x] for x in ['lr_number', 'final_lr_date', 'lr_current_status', 'lr_status_remark'] if x in cleaned_data}
-                            supabase.table("shipments").update(lr_fields).eq("doc_number", cleaned_data['doc_number']).execute()
-                        elif upload_mode == "Bulk Update Approvals Details Only" and cleaned_data.get('doc_number'):
-                            app_fields = {x: cleaned_data[x] for x in ['order_approval_status', 'order_approval_remark', 'distributor_approval_date_time'] if x in cleaned_data}
-                            supabase.table("shipments").update(app_fields).eq("doc_number", cleaned_data['doc_number']).execute()
-                        records_pushed += 1
-                    except Exception as row_error:
-                        # Print explicit database row error details to terminal logs instead of hanging
-                        st.sidebar.error(f"Row skipped [Doc: {cleaned_data.get('doc_number')}]: {row_error}")
+                            supabase.table("shipments").upsert(chunk).execute()
+                            success_count += len(chunk)
+                        else:
+                            # Updates still require row validation lookups
+                            for single_row in chunk:
+                                if upload_mode == "Bulk Update LR Section Only":
+                                    lr_f = {x: single_row[x] for x in ['lr_number', 'final_lr_date', 'lr_current_status', 'lr_status_remark'] if x in single_row}
+                                    supabase.table("shipments").update(lr_f).eq("doc_number", single_row['doc_number']).execute()
+                                elif upload_mode == "Bulk Update Approvals Details Only":
+                                    app_f = {x: single_row[x] for x in ['order_approval_status', 'order_approval_remark', 'distributor_approval_date_time'] if x in single_row}
+                                    supabase.table("shipments").update(app_f).eq("doc_number", single_row['doc_number']).execute()
+                                success_count += 1
+                    except Exception as tx_err:
+                        st.sidebar.error(f"Batch segment range starting at index row {i} failed transmission: {tx_err}")
                         continue
-                    
-                    # Update status progress indicator
-                    progress_bar.progress((records_pushed) / total_rows)
-                    
-                st.success(f"🎉 Success! Completely synchronized {records_pushed} records rows to the Cloud Database.")
-                st.button("🔄 Refresh System View Layout")
+                
+                status_message.empty()
+                st.success(f"⚡ Core Data Sync Complete! Directly committed {success_count} rows across structural tables grids.")
+                st.button("🔄 Reload Dashboard Frame Rows")
             else:
-                st.error("Column mapping mismatch. Please verify that your spreadsheet matches the required columns template headers layout.")
-        except Exception as file_err:
-            st.error(f"Critical System Execution Error: {file_err}")
+                st.error("Column mapping lookup mismatch. Ensure a clear 'Doc Number' column field header is present.")
+        except Exception as global_err:
+            st.error(f"Critical System Engine Exception: {global_err}")
