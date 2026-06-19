@@ -202,7 +202,7 @@ else:
                         st.toast("Row Synced!")
                         st.rerun()
 
-# BULK SHEET HIGH-SPEED BATCH INGESTION PANEL
+# BULK SHEET INGESTION PIPELINE PANEL
 st.markdown("---")
 st.markdown("### 📥 Bulk Processing Upload Panel")
 if "Edit" not in user_rules["rights"]:
@@ -214,72 +214,79 @@ else:
     
     if uploaded_file:
         try:
-            with st.spinner("Parsing workbook file metadata into systems layers..."):
-                excel_df = pd.read_excel(uploaded_file, sheet_name="Master File1", header=2)
+            with st.spinner("Parsing sheet layout lines..."):
+                # Read from index row 2 to grab headers safely
+                excel_df = pd.read_excel(uploaded_file, header=2)
             
-            rename_map = {
-                'Party Type': 'party_type', 'Doc Number': 'doc_number', 'Doc Date': 'doc_date', 'Doc Type': 'doc_type',
-                'Consignee Name': 'consignee_name', 'Party Name': 'party_name', 'Party Code': 'party_code', 'Party Group': 'party_group',
-                'Party City': 'party_city', 'Party State': 'party_state', 'Party Order No.': 'party_order_no', 'Party Order Date': 'party_order_date',
-                'Doc Qty': 'doc_qty', 'Doc Free Qty': 'doc_free_qty', 'Doc Net Value': 'doc_net_value', 'Doc Eway bill number': 'doc_eway_bill_number',
-                'Doc Eway bill Date': 'doc_eway_bill_date', 'Doc Remark': 'doc_remark', 'LR Number': 'lr_number', 'Temp LR Date': 'temp_lr_date',
-                'Temp Courier Name': 'temp_courier_name', 'Courier Vendor': 'courier_vendor', 'Final Courier name': 'final_courier_name',
-                'Dispatch Mode': 'dispatch_mode', 'Final LR Date': 'final_lr_date', 'Number of Boxes': 'number_of_boxes', 'Weight': 'weight',
-                'LR Status Date': 'lr_status_date', 'LR Current Status': 'lr_current_status', 'LR Status Remark': 'lr_status_remark',
-                'LR Final Date of Delivery': 'lr_final_date_of_delivery', 'LR Expected date of Delivery': 'lr_expected_date_of_delivery',
-                'LR Final Status': 'lr_final_status', 'LR Final Status Updation Date Time': 'lr_final_status_updation_date_time',
-                'Auto Status Date': 'auto_status_date', 'Auto Status': 'auto_status', 'Auto Status Remark': 'auto_status_remark',
-                'Auto Status Refresh Date Time': 'auto_status_refresh_date_time', 'Order Received Date time': 'order_received_date_time',
-                'Sales Approval Date time': 'sales_approval_date_time', 'Distributor Approval Date Time': 'distributor_approval_date_time',
-                'Order Approval Status': 'order_approval_status', 'Order Approval Remark': 'order_approval_remark'
-            }
-            
-            excel_df = excel_df.rename(columns=rename_map)
-            
-            if 'doc_number' in excel_df.columns:
+            # Defensive Structural Mapping: Automatically match columns context positions cleanly
+            clean_cols = []
+            for col in excel_df.columns:
+                c_str = str(col).strip().lower().replace('.', '').replace(' ', '_')
+                clean_cols.append(c_str)
+            excel_df.columns = clean_cols
+
+            # Match and normalize your key database column targets
+            possible_keys = ['doc_number', 'doc_no', 'document_number']
+            primary_key_col = next((x for x in possible_keys if x in excel_df.columns), None)
+
+            if primary_key_col:
+                # Rename database key field column internally to keep backend consistent
+                excel_df = excel_df.rename(columns={primary_key_col: 'doc_number'})
                 excel_df = excel_df.dropna(subset=['doc_number'])
                 total_rows = len(excel_df)
                 
-                st.info(f"⚡ High-Speed Batch Ingestion Active. Processing {total_rows} rows into transmission memory chunks...")
+                st.info(f"⚡ Bulk Transaction Pack Engaged. Batching {total_rows} rows into cloud channels...")
                 
                 batch_container = []
-                records_processed = 0
-                
                 for _, row in excel_df.iterrows():
                     row_data = row.to_dict()
                     cleaned_data = {}
-                    for k, v in row_data.items():
-                        if pd.isna(v) or str(v).strip().lower() in ['nan', 'nat', '#ref!', '#value!', '00/01/1900']:
-                            cleaned_data[k] = None
-                        elif hasattr(v, 'strftime'):
-                            cleaned_data[k] = v.strftime('%Y-%m-%d')
-                        else:
-                            if k in ['doc_qty', 'doc_free_qty', 'number_of_boxes', 'cases']:
-                                try: cleaned_data[k] = int(float(v))
-                                except: cleaned_data[k] = 0
-                            elif k in ['doc_net_value', 'weight']:
-                                try: cleaned_data[k] = float(v)
-                                except: cleaned_data[k] = 0.0
-                            else:
-                                cleaned_data[k] = str(v).replace('`', '').strip()
                     
-                    batch_container.append(cleaned_data)
+                    # Normalize and loop map cell strings securely
+                    for k, v in row_data.items():
+                        # Direct key normalization map translations
+                        db_k = k
+                        if k == 'consignee_name' or k == 'consignee': db_k = 'consignee_name'
+                        if k == 'party_name' or k == 'party': db_k = 'party_name'
+                        if k == 'bill_net_value' or k == 'doc_net_value': db_k = 'doc_net_value'
+                        if k == 'lr_no' or k == 'lr_number': db_k = 'lr_number'
+                        if k == 'lrdate(pickuptdt)' or k == 'final_lr_date': db_k = 'final_lr_date'
+                        if k == 'current_status' or k == 'lr_current_status': db_k = 'lr_current_status'
+                        if k == 'status_date' or k == 'lr_status_date': db_k = 'lr_status_date'
+                        if k == 'distributor_approval_date_time' or k == 'distributor_approval_time': db_k = 'distributor_approval_date_time'
+
+                        if pd.isna(v) or str(v).strip().lower() in ['nan', 'nat', '#ref!', '#value!', '00/01/1900', 'tbc']:
+                            cleaned_data[db_k] = None
+                        elif hasattr(v, 'strftime'):
+                            cleaned_data[db_k] = v.strftime('%Y-%m-%d')
+                        else:
+                            if db_k in ['doc_qty', 'doc_free_qty', 'number_of_boxes', 'cases', 'bill_qty', 'free_qty']:
+                                try: cleaned_data[db_k] = int(float(v))
+                                except: cleaned_data[db_k] = 0
+                            elif db_k in ['doc_net_value', 'weight', 'bill_net_value']:
+                                try: cleaned_data[db_k] = float(v)
+                                except: cleaned_data[db_k] = 0.0
+                            else:
+                                cleaned_data[db_k] = str(v).replace('`', '').strip()
+                    
+                    # Add data to staging buffer list
+                    if cleaned_data.get('doc_number'):
+                        batch_container.append(cleaned_data)
                 
-                # --- HIGH SPEED BATCHING SPLITTER (Groups rows by sets of 200) ---
-                BATCH_SIZE = 200
+                # EXECUTE CHUNK TRANSFERS (Pushes sets of 100 entries instantly)
+                BATCH_SIZE = 100
                 success_count = 0
                 status_message = st.empty()
                 
                 for i in range(0, len(batch_container), BATCH_SIZE):
                     chunk = batch_container[i:i + BATCH_SIZE]
-                    status_message.text(f"Pushing data segment chunk: Rows {i} to {min(i+BATCH_SIZE, len(batch_container))}...")
+                    status_message.text(f"Pushing pipeline chunk segment: Rows {i} to {min(i+BATCH_SIZE, len(batch_container))}...")
                     
                     try:
                         if upload_mode == "Bulk Ingest Fresh Orders":
                             supabase.table("shipments").upsert(chunk).execute()
                             success_count += len(chunk)
                         else:
-                            # Updates still require row validation lookups
                             for single_row in chunk:
                                 if upload_mode == "Bulk Update LR Section Only":
                                     lr_f = {x: single_row[x] for x in ['lr_number', 'final_lr_date', 'lr_current_status', 'lr_status_remark'] if x in single_row}
@@ -289,13 +296,13 @@ else:
                                     supabase.table("shipments").update(app_f).eq("doc_number", single_row['doc_number']).execute()
                                 success_count += 1
                     except Exception as tx_err:
-                        st.sidebar.error(f"Batch segment range starting at index row {i} failed transmission: {tx_err}")
+                        st.sidebar.error(f"Batch index row segment range {i} failed database write constraints validation: {tx_err}")
                         continue
                 
                 status_message.empty()
                 st.success(f"⚡ Core Data Sync Complete! Directly committed {success_count} rows across structural tables grids.")
                 st.button("🔄 Reload Dashboard Frame Rows")
             else:
-                st.error("Column mapping lookup mismatch. Ensure a clear 'Doc Number' column field header is present.")
+                st.error("Column mapping lookup failed. Could not locate a valid 'Doc Number' or 'Doc No' primary key layout column header inside your sheet index lines.")
         except Exception as global_err:
-            st.error(f"Critical System Engine Exception: {global_err}")
+            st.error(f"System Engine Ingestion Exception: {global_err}")
