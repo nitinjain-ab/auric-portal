@@ -33,7 +33,7 @@ st.markdown(
         background-color: #1A202C !important;
     }
     
-    /* Premium Auric Gold Action Buttons */
+    /* Premium Brand Action Buttons */
     .stButton>button {
         background: linear-gradient(135deg, #D4AF37 0%, #AA7C11 100%) !important;
         color: #0F1216 !important;
@@ -101,13 +101,13 @@ total_shipments = len(df)
 pending_count = len(df[df['lr_current_status'].astype(str).str.lower().str.contains('pending|transit', na=False)]) if 'lr_current_status' in df.columns else 0
 kerala_count = len(df[df['party_state'].astype(str).str.upper() == 'KERALA']) if 'party_state' in df.columns else 0
 
-with top_2_col := top_col2:
+with top_col2:
     st.markdown(f'<div class="stat-box"><div class="stat-val">{total_shipments}</div><div class="stat-lbl">Shipments</div></div>', unsafe_allow_html=True)
-with top_3_col := top_col3:
+with top_col3:
     st.markdown(f'<div class="stat-box"><div class="stat-val">{pending_count}</div><div class="stat-lbl">In Transit</div></div>', unsafe_allow_html=True)
-with top_4_col := top_col4:
+with top_col4:
     st.markdown(f'<div class="stat-box"><div class="stat-val">{kerala_count}</div><div class="stat-lbl">Kerala Nodes</div></div>', unsafe_allow_html=True)
-with top_5_col := top_col5:
+with top_col5:
     view_tier = st.selectbox("", ["Admin (All Zones)", "Kerala Restricted"], label_visibility="collapsed")
 
 if view_tier == "Kerala Restricted" and 'party_state' in df.columns:
@@ -125,7 +125,6 @@ with left_canvas:
         # High speed global row search layout box
         search_str = st.text_input("🔍 Rapid Manifest Search Box:", "", placeholder="Type any Invoice No, Client Name, or Tracking ID to filter matching elements lines...")
         
-        # Pull parameters from the Toolbox Filters state values
         f_df = df.copy()
         
         # Handle search matches across the canvas frame
@@ -250,7 +249,6 @@ with right_toolbox:
                     
                     st.session_state["auric_master_dataframe"] = pd.DataFrame(sanitized_list)
                     
-                    # Async silent chunk writing layout fallback arrays
                     try:
                         post_headers = {**HTTP_HEADERS, "Prefer": "resolution=merge-duplicates, return=minimal"}
                         requests.post(BASE_API_ROUTE, headers=post_headers, data=json.dumps(sanitized_list[:150]))
