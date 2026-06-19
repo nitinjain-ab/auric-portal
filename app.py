@@ -1,31 +1,41 @@
 import streamlit as st
 import pandas as pd
-from supabase import create_client, Client
+import requests
+import json
 
 st.set_page_config(page_title="Auric Control Hub v4.0", layout="wide")
 
-# Natively initialize cloud database connection pipeline
-@st.cache_resource
-def init_supabase():
-    url = st.secrets["connections"]["supabase"]["supabase_url"]
-    key = st.secrets["connections"]["supabase"]["supabase_key"]
-    return create_client(url, key)
-
+# Fetch clean credentials directly from your secrets box configuration layers
 try:
-    supabase: Client = init_supabase()
-except Exception as e:
-    st.error(f"Database handshake failed. Please check your Streamlit Secrets configuration.")
+    SUPABASE_URL = st.secrets["connections"]["supabase"]["supabase_url"].strip().rstrip('/')
+    SUPABASE_KEY = st.secrets["connections"]["supabase"]["supabase_key"].strip()
+except Exception:
+    st.error("Missing configuration credentials inside the Streamlit Cloud Secrets box.")
     st.stop()
 
-# Load Data rows from active Supabase table
+# Build the exact, un-crashable direct HTTP endpoint routing paths natively
+BASE_API_ROUTE = f"{SUPABASE_URL}/rest/v1/shipments"
+HTTP_HEADERS = {
+    "apikey": SUPABASE_KEY,
+    "Authorization": f"Bearer {SUPABASE_KEY}",
+    "Content-Type": "application/json",
+    "Prefer": "return=representation"
+}
+
+# Load Data rows natively using clean direct API requests loops
 def load_db_data():
     try:
-        response = supabase.table("shipments").select("*").execute()
-        return pd.DataFrame(response.data)
-    except Exception as e:
+        # Request data rows sorted by primary document key identities
+        url = f"{BASE_API_ROUTE}?select=*&order=doc_number"
+        response = requests.get(url, headers=HTTP_HEADERS)
+        if response.status_code == 200:
+            return pd.DataFrame(response.json())
+        else:
+            return pd.DataFrame()
+    except Exception:
         return pd.DataFrame()
 
-# Initialize dynamic permission states
+# Initialize dynamic permission states roles matrices
 if "user_roles_db" not in st.session_state:
     st.session_state["user_roles_db"] = {
         "admin_master": {"allowed_parties": "All", "allowed_types": "All", "allowed_states": "All", "rights": ["View", "Edit", "Download"]},
@@ -41,7 +51,7 @@ st.markdown("<style>div.block-container{padding-top:1rem;}</style>", unsafe_allo
 app_col1, app_col2 = st.columns([3, 1])
 with app_col1:
     st.title("Auric Dispatch Master Control Board")
-    st.caption("Ver 4.0 Production Engine • High-Speed Batch Ingestion Array")
+    st.caption("Ver 4.0 Direct API Integration Gateway Engine • Zero Library Bottlenecks")
 with app_col2:
     user_options = list(st.session_state["user_roles_db"].keys())
     st.session_state["current_logged_user"] = st.selectbox(
@@ -52,44 +62,6 @@ with app_col2:
 current_user = st.session_state["current_logged_user"]
 user_rules = st.session_state["user_roles_db"][current_user]
 
-# SIDEBAR CONFIGURATION TABS (Admin Only Panel)
-with st.sidebar:
-    st.header("⚙️ Portal System Controls")
-    if current_user != "admin_master":
-        st.warning("🔒 Administrative panels are locked for restricted profiles.")
-    else:
-        setting_tab = st.radio("System Control Panel", ["Dynamic User Creation", "Link Multiple APIs"])
-        if setting_tab == "Dynamic User Creation":
-            st.markdown("#### 👤 Setup Customized Access Role")
-            new_role_name = st.text_input("Role Custom Name", placeholder="e.g., west_warehouse")
-            map_parties = st.multiselect("Assign Selected Parties", options=["All"] + (df['party_name'].dropna().unique().tolist() if not df.empty and 'party_name' in df.columns else []))
-            map_types = st.multiselect("Restrict to Party-Types", options=df['party_type'].dropna().unique().tolist() if not df.empty and 'party_type' in df.columns else ["Distributor", "Vendor"])
-            map_states = st.multiselect("Restrict to States", options=df['party_state'].dropna().unique().tolist() if not df.empty and 'party_state' in df.columns else [])
-            
-            r_view = st.checkbox("Enable Records Viewing", value=True)
-            r_edit = st.checkbox("Enable Cells Modification", value=False)
-            r_down = st.checkbox("Enable Spreadsheet Exporting", value=False)
-            
-            if st.button("Commit New User Role Settings"):
-                if new_role_name:
-                    rights_list = []
-                    if r_view: rights_list.append("View")
-                    if r_edit: rights_list.append("Edit")
-                    if r_down: rights_list.append("Download")
-                    st.session_state["user_roles_db"][new_role_name] = {
-                        "allowed_parties": "All" if "All" in map_parties or not map_parties else map_parties,
-                        "allowed_types": map_types if map_types else "All",
-                        "allowed_states": map_states if map_states else "All",
-                        "rights": rights_list
-                    }
-                    st.success(f"Custom user type role '{new_role_name}' generated successfully.")
-                    st.rerun()
-        elif setting_tab == "Link Multiple APIs":
-            st.markdown("#### 🔑 Global Carrier Gateway Vault")
-            st.text_input("Bluedart Webhook Link Token", type="password", value="AURIC_BLUEDART_PRODUCTION_TOKEN")
-            st.text_input("DTDC Webhook Link Token", type="password", value="AURIC_DTDC_PRODUCTION_TOKEN")
-            st.button("Synchronize Carrier Links")
-
 if "View" not in user_rules["rights"]:
     st.error("🚫 Access Denied: Your current role lacks dashboard viewing properties.")
     st.stop()
@@ -97,7 +69,7 @@ if "View" not in user_rules["rights"]:
 if df.empty:
     st.info("The live database table is currently unpopulated. Seed it via the bulk upload panel below.")
 else:
-    # FILTERS & CONTROLS
+    # DATA SEGMENT FILTERS MATRIX MANAGEMENT
     if current_user != "admin_master":
         if user_rules["allowed_parties"] != "All" and 'party_name' in df.columns: df = df[df['party_name'].isin(user_rules["allowed_parties"])]
         if user_rules["allowed_types"] != "All" and 'party_type' in df.columns: df = df[df['party_type'].isin(user_rules["allowed_types"])]
@@ -154,7 +126,8 @@ else:
                     new_status = st.text_input("LR Current Status", value=str(target_row.get('lr_current_status', '')))
                     new_remark = st.text_input("LR Status Remark", value=str(target_row.get('lr_status_remark', '')))
                     if st.button("Save LR Overwrites"):
-                        supabase.table("shipments").update({"lr_current_status": new_status, "lr_status_remark": new_remark}).eq("doc_number", target_doc).execute()
+                        patch_url = f"{BASE_API_ROUTE}?doc_number=eq.{target_doc}"
+                        requests.patch(patch_url, headers=HTTP_HEADERS, json={"lr_current_status": new_status, "lr_status_remark": new_remark})
                         st.success("Logistics modifications saved successfully.")
                         st.rerun()
                 elif st.session_state.editor == "APP":
@@ -162,7 +135,8 @@ else:
                     new_app_status = st.text_input("Order Approval Status", value=str(target_row.get('order_approval_status', '')))
                     new_app_rem = st.text_area("Order Approval Remark", value=str(target_row.get('order_approval_remark', '')))
                     if st.button("Save Approval Milestones"):
-                        supabase.table("shipments").update({"order_approval_status": new_app_status, "order_approval_remark": new_app_rem}).eq("doc_number", target_doc).execute()
+                        patch_url = f"{BASE_API_ROUTE}?doc_number=eq.{target_doc}"
+                        requests.patch(patch_url, headers=HTTP_HEADERS, json={"order_approval_status": new_app_status, "order_approval_remark": new_app_rem})
                         st.success("Milestone indicators logged successfully.")
                         st.rerun()
 
@@ -178,13 +152,12 @@ if "Edit" in user_rules["rights"]:
             with st.spinner("Extracting workbook layers..."):
                 excel_df = pd.read_excel(uploaded_file, header=2)
             
-            # Standardize and normalize columns dynamically to map them
             excel_df.columns = [str(c).strip().lower().replace('.', '').replace(' ', '_') for c in excel_df.columns]
             
             col_translations = {
                 'party_type': ['party_type', 'partytype'],
                 'doc_number': ['doc_number', 'doc_no', 'document_number', 'document_no'],
-                'doc_date': ['doc_date', 'date', 'document_date', 'doc_date'],
+                'doc_date': ['doc_date', 'date', 'document_date'],
                 'consignee_name': ['consignee_name', 'consignee'],
                 'party_name': ['party_name', 'party'],
                 'party_code': ['party_code', 'partycode'],
@@ -203,7 +176,6 @@ if "Edit" in user_rules["rights"]:
                 if matched_col:
                     final_mapped_df[db_field] = excel_df[matched_col]
             
-            # Positional Fallbacks if strict header strings mismatch
             if 'doc_number' not in final_mapped_df.columns and len(excel_df.columns) > 1:
                 final_mapped_df['doc_number'] = excel_df.iloc[:, 1]
             if 'party_name' not in final_mapped_df.columns and len(excel_df.columns) > 5:
@@ -237,15 +209,16 @@ if "Edit" in user_rules["rights"]:
                 for i in range(0, len(batch_container), BATCH_SIZE):
                     chunk = batch_container[i:i + BATCH_SIZE]
                     if upload_mode == "Bulk Ingest Fresh Orders":
-                        supabase.table("shipments").upsert(chunk).execute()
+                        headers_upsert = {**HTTP_HEADERS, "Prefer": "resolution=merge-duplicates, return=minimal"}
+                        res = requests.post(BASE_API_ROUTE, headers=headers_upsert, data=json.dumps(chunk))
                     else:
                         for r in chunk:
                             if upload_mode == "Bulk Update LR Section Only":
                                 lr_f = {x: r[x] for x in ['lr_number', 'final_lr_date', 'lr_current_status', 'lr_status_date'] if x in r}
-                                supabase.table("shipments").update(lr_f).eq("doc_number", r['doc_number']).execute()
+                                requests.patch(f"{BASE_API_ROUTE}?doc_number=eq.{r['doc_number']}", headers=HTTP_HEADERS, json=lr_f)
                             elif upload_mode == "Bulk Update Approvals Details Only":
                                 app_f = {x: r[x] for x in ['order_approval_status', 'order_approval_remark', 'distributor_approval_date_time'] if x in r}
-                                supabase.table("shipments").update(app_f).eq("doc_number", r['doc_number']).execute()
+                                requests.patch(f"{BASE_API_ROUTE}?doc_number=eq.{r['doc_number']}", headers=HTTP_HEADERS, json=app_f)
                     success_count += len(chunk)
                     
                 st.success(f"🎉 Success! Completely synchronized {success_count} rows across tracker records.")
