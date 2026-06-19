@@ -128,24 +128,24 @@ left_toolbox_col, right_canvas_col = st.columns([1, 4])
 # ⚙️ LEFT PANEL: UTILITY CONTROL VAULT (20%)
 # ==========================================
 with left_toolbox_col:
-    st.markdown("<div class="side-toolbox">", unsafe_allow_html=True)
+    st.markdown('<div class="side-toolbox">', unsafe_allow_html=True)
     st.markdown("<h3>🛠️ Controls Vault</h3>", unsafe_allow_html=True)
     
     admin_tabs = st.tabs(["👤 Roles", "🔑 API", "📥 Upload"])
     
-    with admin_tab1 := admin_tabs[0]:
+    with admin_tabs[0]:
         st.markdown("<h4>User Access Roles</h4>", unsafe_allow_html=True)
         new_role = st.text_input("Role Identifier Name:", placeholder="e.g., south_warehouse", label_visibility="collapsed")
         st.multiselect("Assign Active Zones:", options=["KERALA", "MAHARASHTRA", "DELHI", "GOA"])
         st.button("Lock Role Parameters")
         
-    with admin_tab2 := admin_tabs[1]:
+    with admin_tabs[1]:
         st.markdown("<h4>API Gateway Sync</h4>", unsafe_allow_html=True)
         st.text_input("Bluedart Production Token:", type="password", value="AURIC_BLUEDART_TOKEN_9918")
         st.text_input("DTDC Production Token:", type="password", value="AURIC_DTDC_TOKEN_0041")
         st.button("Synchronize Links")
         
-    with admin_tab3 := admin_tabs[2]:
+    with admin_tabs[2]:
         st.markdown("<h4>Excel Data Ingestion</h4>", unsafe_allow_html=True)
         dropped_workbook = st.file_uploader("Upload tracking file:", type=["xlsx"], label_visibility="collapsed")
         if dropped_workbook:
