@@ -13,7 +13,7 @@ except Exception:
     st.error("Missing configuration credentials inside the Streamlit Cloud Secrets box.")
     st.stop()
 
-# Build the exact, un-crashable direct HTTP endpoint routing paths natively
+# Build direct HTTP endpoint routing paths natively
 BASE_API_ROUTE = f"{SUPABASE_URL}/rest/v1/shipments"
 HTTP_HEADERS = {
     "apikey": SUPABASE_KEY,
@@ -22,13 +22,12 @@ HTTP_HEADERS = {
     "Prefer": "return=representation"
 }
 
-# Load Data rows natively using clean direct API requests loops
+# Load Data rows natively using direct API requests loops
 def load_db_data():
     try:
-        # Request data rows sorted by primary document key identities
-        url = f"{BASE_API_ROUTE}?select=*&order=doc_number"
+        url = f"{BASE_API_ROUTE}?select=*"
         response = requests.get(url, headers=HTTP_HEADERS)
-        if response.status_code == 200:
+        if response.status_code == 200 and response.json():
             return pd.DataFrame(response.json())
         else:
             return pd.DataFrame()
@@ -44,6 +43,7 @@ if "user_roles_db" not in st.session_state:
 if "current_logged_user" not in st.session_state:
     st.session_state["current_logged_user"] = "admin_master"
 
+# Direct live table loading hook
 df = load_db_data()
 
 st.markdown("<style>div.block-container{padding-top:1rem;}</style>", unsafe_allow_html=True)
@@ -51,7 +51,7 @@ st.markdown("<style>div.block-container{padding-top:1rem;}</style>", unsafe_allo
 app_col1, app_col2 = st.columns([3, 1])
 with app_col1:
     st.title("Auric Dispatch Master Control Board")
-    st.caption("Ver 4.0 Direct API Integration Gateway Engine • Zero Library Bottlenecks")
+    st.caption("Ver 4.0 Production Engine • Direct API Integration Gateway Engine")
 with app_col2:
     user_options = list(st.session_state["user_roles_db"].keys())
     st.session_state["current_logged_user"] = st.selectbox(
@@ -66,10 +66,11 @@ if "View" not in user_rules["rights"]:
     st.error("🚫 Access Denied: Your current role lacks dashboard viewing properties.")
     st.stop()
 
+# --- VERIFY DATA PRESENCE AND RENDER GRID LINK ---
 if df.empty:
     st.info("The live database table is currently unpopulated. Seed it via the bulk upload panel below.")
 else:
-    # DATA SEGMENT FILTERS MATRIX MANAGEMENT
+    # Row filters matrix execution guard checks
     if current_user != "admin_master":
         if user_rules["allowed_parties"] != "All" and 'party_name' in df.columns: df = df[df['party_name'].isin(user_rules["allowed_parties"])]
         if user_rules["allowed_types"] != "All" and 'party_type' in df.columns: df = df[df['party_type'].isin(user_rules["allowed_types"])]
@@ -78,7 +79,7 @@ else:
     st.markdown("### 🎛️ Active Dashboard Filters & Slicers")
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        search_q = st.text_input("🔍 Search (Doc Number / Party Name / LR Number)", "")
+        search_q = st.text_input("🔍 Search Box Filtering Engine", "")
     with col2:
         ptype = st.selectbox("Party-Type", ["All"] + df['party_type'].dropna().unique().tolist() if 'party_type' in df.columns else ["All"])
     with col3:
@@ -87,22 +88,34 @@ else:
         pname = st.selectbox("Party Name", ["All"] + df['party_name'].dropna().unique().tolist() if 'party_name' in df.columns else ["All"])
 
     f_df = df.copy()
+    
+    # Secure row search queries mappings handles
     if search_q:
-        f_df = f_df[f_df['doc_number'].astype(str).str.contains(search_q, case=False) | 
-                    f_df['party_name'].astype(str).str.contains(search_q, case=False) | 
-                    f_df['lr_number'].astype(str).str.contains(search_q, case=False)]
-    if ptype != "All": f_df = f_df[f_df['party_type'] == ptype]
-    if pstate != "All": f_df = f_df[f_df['party_state'] == pstate]
-    if pname != "All": f_df = f_df[f_df['party_name'] == pname]
+        match_conditions = []
+        for match_field in ['doc_number', 'party_name', 'lr_number', 'consignee_name']:
+            if match_field in f_df.columns:
+                match_conditions.append(f_df[match_field].astype(str).str.contains(search_q, case=False))
+        if match_conditions:
+            final_mask = match_conditions[0]
+            for mask in match_conditions[1:]:
+                final_mask = final_mask | mask
+            f_df = f_df[final_mask]
 
-    # COMPACT DASHBOARD GRID (Clean viewing format)
+    if ptype != "All" and 'party_type' in f_df.columns: f_df = f_df[f_df['party_type'] == ptype]
+    if pstate != "All" and 'party_state' in f_df.columns: f_df = f_df[f_df['party_state'] == pstate]
+    if pname != "All" and 'party_name' in f_df.columns: f_df = f_df[f_df['party_name'] == pname]
+
+    # COMPACT DASHBOARD GRID (Clean viewing format adaptive backup)
     st.markdown("### 📦 Active Shipments Log Manifest")
-    dashboard_cols = ['consignee_name', 'party_name', 'party_code', 'party_type', 'doc_number', 'doc_date', 'doc_net_value', 'lr_number', 'final_lr_date', 'lr_current_status', 'lr_status_date', 'distributor_approval_date_time']
-    available_cols = [c for c in dashboard_cols if c in f_df.columns]
-    st.dataframe(f_df[available_cols], use_container_width=True, hide_index=True)
+    ideal_cols = ['consignee_name', 'party_name', 'party_code', 'party_type', 'doc_number', 'doc_date', 'doc_net_value', 'lr_number', 'final_lr_date', 'lr_current_status', 'lr_status_date', 'distributor_approval_date_time']
+    render_cols = [c for c in ideal_cols if c in f_df.columns]
+    if not render_cols:
+        render_cols = f_df.columns.tolist()
+        
+    st.dataframe(f_df[render_cols], use_container_width=True, hide_index=True)
 
     if "Download" in user_rules["rights"]:
-        csv_buffer = f_df[available_cols].to_csv(index=False).encode('utf-8')
+        csv_buffer = f_df[render_cols].to_csv(index=False).encode('utf-8')
         st.download_button(label="📥 Download Selected Entries as Matrix CSV Report", data=csv_buffer, file_name="auric_tracker_report.csv", mime="text/csv")
 
     # MANUAL EDIT DRAWER PANEL
@@ -110,6 +123,8 @@ else:
     st.markdown("### 📝 Manual Row Level Selection Operations")
     if "Edit" not in user_rules["rights"]:
         st.error("🚫 Access Blocked: Your role does not hold cell modification properties.")
+    elif 'doc_number' not in f_df.columns:
+        st.warning("Editing disabled: 'doc_number' primary key coordinate missing from database layout attributes.")
     else:
         target_doc = st.selectbox("Choose a Doc Number to target edits:", ["-- None Selected --"] + f_df['doc_number'].tolist())
         if target_doc != "-- None Selected --":
@@ -222,7 +237,7 @@ if "Edit" in user_rules["rights"]:
                     success_count += len(chunk)
                     
                 st.success(f"🎉 Success! Completely synchronized {success_count} rows across tracker records.")
-                st.button("🔄 Click to Refresh Grid Canvas")
+                st.rerun()
             else:
                 st.error("Structure mismatch. Check that your spreadsheet rows contain active data entries.")
         except Exception as global_err:
