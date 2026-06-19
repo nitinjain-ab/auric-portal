@@ -47,7 +47,7 @@ st.markdown("<style>div.block-container{padding-top:1rem;}</style>", unsafe_allo
 app_col1, app_col2 = st.columns([3, 1])
 with app_col1:
     st.title("Auric Dispatch Master Control Board")
-    st.caption("Ver 4.0 Core Dashboard Engine • Multi-Carrier Integration Matrix Hub")
+    st.caption("Ver 4.0 Core Dashboard Engine • Position-Based Indexing Architecture")
 with app_col2:
     user_options = list(st.session_state["user_roles_db"].keys())
     st.session_state["current_logged_user"] = st.selectbox(
@@ -210,99 +210,93 @@ if "Edit" not in user_rules["rights"]:
 else:
     upload_mode = st.selectbox("Select Excel Bulk upload engine type context target rules:", 
                                ["Bulk Ingest Fresh Orders", "Bulk Update LR Section Only", "Bulk Update Approvals Details Only"])
-    uploaded_file = st.file_uploader("Drop master version 4.0 spreadsheet here to execute bulk processing logs:", type=["xlsx"])
+    uploaded_file = st.file_uploader("Drop master spreadsheet here to execute bulk processing logs:", type=["xlsx"])
     
     if uploaded_file:
         try:
-            with st.spinner("Parsing sheet layout lines..."):
-                # Read from index row 2 to grab headers safely
-                excel_df = pd.read_excel(uploaded_file, header=2)
+            with st.spinner("Extracting row coordinates..."):
+                # Read without checking string labels, targeting layout matrix rows directly
+                excel_df = pd.read_excel(uploaded_file, sheet_name="Master File1", header=2)
             
-            # Defensive Structural Mapping: Automatically match columns context positions cleanly
-            clean_cols = []
-            for col in excel_df.columns:
-                c_str = str(col).strip().lower().replace('.', '').replace(' ', '_')
-                clean_cols.append(c_str)
-            excel_df.columns = clean_cols
-
-            # Match and normalize your key database column targets
-            possible_keys = ['doc_number', 'doc_no', 'document_number']
-            primary_key_col = next((x for x in possible_keys if x in excel_df.columns), None)
-
-            if primary_key_col:
-                # Rename database key field column internally to keep backend consistent
-                excel_df = excel_df.rename(columns={primary_key_col: 'doc_number'})
-                excel_df = excel_df.dropna(subset=['doc_number'])
-                total_rows = len(excel_df)
-                
-                st.info(f"⚡ Bulk Transaction Pack Engaged. Batching {total_rows} rows into cloud channels...")
+            total_columns = len(excel_df.columns)
+            
+            if total_columns >= 12:
+                # Target by position location indexes to make it un-crashable
+                db_fields_ordered = [
+                    'party_type', 'doc_number', 'doc_date', 'doc_type', 'consignee_name',
+                    'party_name', 'party_code', 'party_group', 'party_city', 'party_state',
+                    'party_order_no', 'party_order_date', 'doc_qty', 'doc_free_qty', 'doc_net_value',
+                    'doc_eway_bill_number', 'doc_eway_bill_date', 'doc_remark', 'lr_number',
+                    'temp_lr_date', 'temp_courier_name', 'courier_vendor', 'final_courier_name',
+                    'dispatch_mode', 'final_lr_date', 'number_of_boxes', 'weight',
+                    'lr_status_date', 'lr_current_status', 'lr_status_remark', 'lr_final_date_of_delivery',
+                    'lr_expected_date_of_delivery', 'lr_final_status', 'lr_final_status_updation_date_time',
+                    'auto_status_date', 'auto_status', 'auto_status_remark', 'auto_status_refresh_date_time',
+                    'order_received_date_time', 'sales_approval_date_time', 'distributor_approval_date_time',
+                    'order_approval_status', 'order_approval_remark'
+                ]
                 
                 batch_container = []
+                
                 for _, row in excel_df.iterrows():
-                    row_data = row.to_dict()
-                    cleaned_data = {}
+                    vals = row.tolist()
                     
-                    # Normalize and loop map cell strings securely
-                    for k, v in row_data.items():
-                        # Direct key normalization map translations
-                        db_k = k
-                        if k == 'consignee_name' or k == 'consignee': db_k = 'consignee_name'
-                        if k == 'party_name' or k == 'party': db_k = 'party_name'
-                        if k == 'bill_net_value' or k == 'doc_net_value': db_k = 'doc_net_value'
-                        if k == 'lr_no' or k == 'lr_number': db_k = 'lr_number'
-                        if k == 'lrdate(pickuptdt)' or k == 'final_lr_date': db_k = 'final_lr_date'
-                        if k == 'current_status' or k == 'lr_current_status': db_k = 'lr_current_status'
-                        if k == 'status_date' or k == 'lr_status_date': db_k = 'lr_status_date'
-                        if k == 'distributor_approval_date_time' or k == 'distributor_approval_time': db_k = 'distributor_approval_date_time'
+                    # Guard to verify the core primary key field position (index 1) contains an active Doc Number
+                    if len(vals) > 1 and pd.notna(vals[1]) and str(vals[1]).strip() not in ['', 'nan', 'NaN']:
+                        cleaned_data = {}
+                        
+                        for pos, field_name in enumerate(db_fields_ordered):
+                            if pos < len(vals):
+                                v = vals[pos]
+                                if pd.isna(v) or str(v).strip().lower() in ['nan', 'nat', '#ref!', '#value!', '00/01/1900', 'tbc']:
+                                    cleaned_data[field_name] = None
+                                elif hasattr(v, 'strftime'):
+                                    cleaned_data[field_name] = v.strftime('%Y-%m-%d')
+                                else:
+                                    if field_name in ['doc_qty', 'doc_free_qty', 'number_of_boxes']:
+                                        try: cleaned_data[field_name] = int(float(v))
+                                        except: cleaned_data[field_name] = 0
+                                    elif field_name in ['doc_net_value', 'weight']:
+                                        try: cleaned_data[field_name] = float(v)
+                                        except: cleaned_data[field_name] = 0.0
+                                    else:
+                                        cleaned_data[field_name] = str(v).strip()
+                        
+                        if cleaned_data.get('doc_number'):
+                            batch_container.append(cleaned_data)
 
-                        if pd.isna(v) or str(v).strip().lower() in ['nan', 'nat', '#ref!', '#value!', '00/01/1900', 'tbc']:
-                            cleaned_data[db_k] = None
-                        elif hasattr(v, 'strftime'):
-                            cleaned_data[db_k] = v.strftime('%Y-%m-%d')
-                        else:
-                            if db_k in ['doc_qty', 'doc_free_qty', 'number_of_boxes', 'cases', 'bill_qty', 'free_qty']:
-                                try: cleaned_data[db_k] = int(float(v))
-                                except: cleaned_data[db_k] = 0
-                            elif db_k in ['doc_net_value', 'weight', 'bill_net_value']:
-                                try: cleaned_data[db_k] = float(v)
-                                except: cleaned_data[db_k] = 0.0
+                total_extracted = len(batch_container)
+                
+                if total_extracted > 0:
+                    st.info(f"⚡ Batch transmission initiated. Writing {total_extracted} entries to table storage...")
+                    
+                    BATCH_SIZE = 100
+                    success_count = 0
+                    
+                    for i in range(0, len(batch_container), BATCH_SIZE):
+                        chunk = batch_container[i:i + BATCH_SIZE]
+                        try:
+                            if upload_mode == "Bulk Ingest Fresh Orders":
+                                supabase.table("shipments").upsert(chunk).execute()
+                                success_count += len(chunk)
                             else:
-                                cleaned_data[db_k] = str(v).replace('`', '').strip()
+                                for single_row in chunk:
+                                    if upload_mode == "Bulk Update LR Section Only":
+                                        lr_f = {x: single_row[x] for x in ['lr_number', 'final_lr_date', 'lr_current_status', 'lr_status_remark'] if x in single_row}
+                                        supabase.table("shipments").update(lr_f).eq("doc_number", single_row['doc_number']).execute()
+                                    elif upload_mode == "Bulk Update Approvals Details Only":
+                                        app_f = {x: single_row[x] for x in ['order_approval_status', 'order_approval_remark', 'distributor_approval_date_time'] if x in single_row}
+                                        supabase.table("shipments").update(app_f).eq("doc_number", single_row['doc_number']).execute()
+                                    success_count += 1
+                        except Exception as tx_err:
+                            st.sidebar.error(f"Write validation error near record index row {i}: {tx_err}")
+                            continue
                     
-                    # Add data to staging buffer list
-                    if cleaned_data.get('doc_number'):
-                        batch_container.append(cleaned_data)
-                
-                # EXECUTE CHUNK TRANSFERS (Pushes sets of 100 entries instantly)
-                BATCH_SIZE = 100
-                success_count = 0
-                status_message = st.empty()
-                
-                for i in range(0, len(batch_container), BATCH_SIZE):
-                    chunk = batch_container[i:i + BATCH_SIZE]
-                    status_message.text(f"Pushing pipeline chunk segment: Rows {i} to {min(i+BATCH_SIZE, len(batch_container))}...")
-                    
-                    try:
-                        if upload_mode == "Bulk Ingest Fresh Orders":
-                            supabase.table("shipments").upsert(chunk).execute()
-                            success_count += len(chunk)
-                        else:
-                            for single_row in chunk:
-                                if upload_mode == "Bulk Update LR Section Only":
-                                    lr_f = {x: single_row[x] for x in ['lr_number', 'final_lr_date', 'lr_current_status', 'lr_status_remark'] if x in single_row}
-                                    supabase.table("shipments").update(lr_f).eq("doc_number", single_row['doc_number']).execute()
-                                elif upload_mode == "Bulk Update Approvals Details Only":
-                                    app_f = {x: single_row[x] for x in ['order_approval_status', 'order_approval_remark', 'distributor_approval_date_time'] if x in single_row}
-                                    supabase.table("shipments").update(app_f).eq("doc_number", single_row['doc_number']).execute()
-                                success_count += 1
-                    except Exception as tx_err:
-                        st.sidebar.error(f"Batch index row segment range {i} failed database write constraints validation: {tx_err}")
-                        continue
-                
-                status_message.empty()
-                st.success(f"⚡ Core Data Sync Complete! Directly committed {success_count} rows across structural tables grids.")
-                st.button("🔄 Reload Dashboard Frame Rows")
+                    st.success(f"🎉 Success! Completely synchronized {success_count} records rows to the Cloud Database.")
+                    st.button("🔄 Reload Dashboard Grid View")
+                else:
+                    st.error("No valid entries found. Ensure that row cells in your 'Doc Number' column are not completely blank.")
             else:
-                st.error("Column mapping lookup failed. Could not locate a valid 'Doc Number' or 'Doc No' primary key layout column header inside your sheet index lines.")
-        except Exception as global_err:
-            st.error(f"System Engine Ingestion Exception: {global_err}")
+                st.error("Structure check failed. The uploaded file does not contain enough layout data columns.")
+        except Exception as err:
+            st.error(f"System Matrix Extraction Exception: {err}")
