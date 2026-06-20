@@ -7,7 +7,7 @@ import time
 # Force high-efficiency 100% full-width viewport canvas constraints
 st.set_page_config(page_title="Auric Control Board", layout="wide")
 
-# --- PREMIUM VISUAL THEME ---
+# --- CLEAN PREMIUM ENTERPRISE VISUAL THEME ---
 st.markdown(
     """
     <style>
@@ -133,10 +133,7 @@ with st.sidebar:
             dropped_workbook = st.file_uploader("Drop tracking workbook file (.xlsx):", type=["xlsx"])
             if dropped_workbook:
                 try:
-                    # Clean multi-row Excel headers
                     raw_excel_df = pd.read_excel(dropped_workbook, header=2)
-                    
-                    # Force strict structural naming formats across incoming elements row blocks
                     raw_excel_df.columns = [str(c).strip().lower().replace('.', '').replace(' ', '_') for c in raw_excel_df.columns]
                     
                     vocab_translations = {
@@ -159,13 +156,11 @@ with st.sidebar:
                         m_col = next((c for c in raw_excel_df.columns if c in key_matches or any(km in c for km in key_matches)), None)
                         if m_col: mapped_build_df[db_field] = raw_excel_df[m_col]
                     
-                    # Fallback assignment arrays drivers if mapping hits blank spaces
                     if 'doc_number' not in mapped_build_df.columns and len(raw_excel_df.columns) > 1:
                         mapped_build_df['doc_number'] = raw_excel_df.iloc[:, 1]
                     if 'party_name' not in mapped_build_df.columns and len(raw_excel_df.columns) > 4:
                         mapped_build_df['party_name'] = raw_excel_df.iloc[:, 4]
                         
-                    # Drop blank spaces safely
                     mapped_build_df = mapped_build_df.dropna(subset=['doc_number'])
                     total_rows_to_process = len(mapped_build_df)
                     
@@ -180,20 +175,17 @@ with st.sidebar:
                                 else:
                                     c_row[k] = str(v).strip()
                             
-                            # Standardize values arrays formatting
                             if 'doc_net_value' in c_row and c_row['doc_net_value'] != "N/A":
                                 try: c_row['doc_net_value'] = str(round(float(c_row['doc_net_value']), 2))
                                 except: pass
                             sanitized_list.append(c_row)
                         
-                        # Convert to solid dataframe layout object
                         loaded_df = pd.DataFrame(sanitized_list)
                         
                         progress_label_placeholder = st.empty()
                         progress_bar_placeholder = st.empty()
                         
                         if "1. Ingest Master" in upload_tier_mode:
-                            # FORCE DATA STRAIGHT TO APP WORKSPACE TO PREVENT EMPTY VIEWS COMPLETELY
                             st.session_state["auric_master_dataframe"] = loaded_df
                             
                             CHUNK_SIZE = 250
@@ -246,31 +238,41 @@ with st.sidebar:
 # ========================================================
 # 📦 MAIN DATA CANVAS PANEL (100% MAIN COLUMN SCREEN SPACE)
 # ========================================================
-st.markdown("### 🎛️ Live Search Filters & Summary Indicators</h3>", unsafe_allow_html=True)
+st.markdown("### 🎛️ Live Search Filters & Summary Indicators", unsafe_allow_html=True)
 
-# 1. THE TOP WORKSPACE MENUBAR SEARCH FILTERS CONTROLS
-filter_col1, filter_col2, filter_col3, filter_col4, filter_col5 = st.columns([2, 1, 1, 1, 1])
+# Generate list option fields dynamically from active dataframe values
+ptype_options = ["All Party-Types"]
+party_options = ["All Parties"]
+state_options = ["All States"]
+
+if not df.empty:
+    if 'party_type' in df.columns: ptype_options += sorted([str(x) for x in df['party_type'].dropna().unique() if str(x).strip() != ''])
+    if 'party_name' in df.columns: party_options += sorted([str(x) for x in df['party_name'].dropna().unique() if str(x).strip() != ''])
+    if 'party_state' in df.columns: state_options += sorted([str(x) for x in df['party_state'].dropna().unique() if str(x).strip() != ''])
+
+# 1. THE TOP WORKSPACE MENUBAR SEARCH FILTERS CONTROLS (Restored Grid Setup)
+filter_col1, filter_col2, filter_col3, filter_col4 = st.columns([1.5, 1, 1, 1])
+
+with filter_col1:
+    search_str = st.text_input("Global Search Input Field Tracker", "", placeholder="🔍 Type Invoice No, Client Name, or LR tracking ID to filter...", label_visibility="collapsed")
+with filter_col2:
+    ptype_sel = st.selectbox("Party Type Filter Menu", options=ptype_options, index=0, label_visibility="collapsed")
+with filter_col3:
+    party_sel = st.selectbox("Party Name Filter Menu", options=party_options, index=0, label_visibility="collapsed")
+with filter_col4:
+    state_sel = st.selectbox("State Region Filter Dropdown Menu", options=state_options, index=0, label_visibility="collapsed")
+
+# 📊 METRICS KPI SUMMARY INFRASTRUCTURE SECTION BAR
+st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
+stat_col1, stat_col2, stat_col3 = st.columns(3)
 
 total_shipments = len(df)
 pending_count = len(df[df['lr_current_status'].astype(str).str.lower().str.contains('pending|transit', na=False)]) if 'lr_current_status' in df.columns else 0
 kerala_total = len(df[df['party_state'].astype(str).str.upper() == 'KERALA']) if 'party_state' in df.columns else 0
 
-# DYNAMIC DROPDOWN SELECTION: Generates labels directly from active column records values
-available_states_options = ["All States Selection"]
-if not df.empty and 'party_state' in df.columns:
-    unique_states_list = sorted([str(x) for x in df['party_state'].dropna().unique() if str(x).strip() != ''])
-    available_states_options += unique_states_list
-
-with filter_col1:
-    search_str = st.text_input("Global Search Input Field Tracker", "", placeholder="Type any Invoice No, Client Name, or LR tracking code here to filter dashboard instantly...", label_visibility="collapsed")
-with filter_col2:
-    state_sel = st.selectbox("State Region Filter Dropdown Menu", options=available_states_options, index=0, label_visibility="collapsed")
-with filter_col3:
-    st.markdown(f'<div class="stat-box"><div class="stat-val">{total_shipments}</div><div class="stat-lbl">Total Shipments</div></div>', unsafe_allow_html=True)
-with filter_col4:
-    st.markdown(f'<div class="stat-box"><div class="stat-val">{pending_count}</div><div class="stat-lbl">In Transit</div></div>', unsafe_allow_html=True)
-with filter_col5:
-    st.markdown(f'<div class="stat-box"><div class="stat-val">{kerala_total}</div><div class="stat-lbl">Kerala Nodes</div></div>', unsafe_allow_html=True)
+with stat_col1: st.markdown(f'<div class="stat-box"><div class="stat-val">{total_shipments}</div><div class="stat-lbl">Total Logged Shipments</div></div>', unsafe_allow_html=True)
+with stat_col2: st.markdown(f'<div class="stat-box"><div class="stat-val">{pending_count}</div><div class="stat-lbl">In-Transit Delivery Pipeline</div></div>', unsafe_allow_html=True)
+with stat_col3: st.markdown(f'<div class="stat-box"><div class="stat-val">{kerala_total}</div><div class="stat-lbl">Active Kerala Nodes</div></div>', unsafe_allow_html=True)
 
 # Run cascading reductions masks evaluations queries safely with string fallback safety layers
 f_df = df.copy()
@@ -282,10 +284,11 @@ if not f_df.empty:
             search_mask = search_mask | f_df[col].astype(str).str.lower().str.contains(sl, na=False)
         f_df = f_df[search_mask]
 
-    if state_sel != "All States Selection" and 'party_state' in f_df.columns: 
-        f_df = f_df[f_df['party_state'].astype(str) == state_sel]
+    if ptype_sel != "All Party-Types" and 'party_type' in f_df.columns: f_df = f_df[f_df['party_type'].astype(str) == ptype_sel]
+    if party_sel != "All Parties" and 'party_name' in f_df.columns: f_df = f_df[f_df['party_name'].astype(str) == party_sel]
+    if state_sel != "All States" and 'party_state' in f_df.columns: f_df = f_df[f_df['party_state'].astype(str) == state_sel]
 
-# 2. CONTEXTUAL IN-LINE FORM WORKSPACE FIELD OVERWRITES DRAWER PANEL MODULE
+# 2. CONTEXTUAL IN-LINE FORM FIELD CHANGES MODAL
 if st.session_state["selected_edit_doc"]:
     tgt_id = st.session_state["selected_edit_doc"]
     tgt_row = df[df['doc_number'] == tgt_id].iloc[0]
@@ -332,7 +335,7 @@ if st.session_state["selected_edit_doc"]:
 # 3. THE HIGH-DENSITY PAGINATED WINDOW LIST DATA CANVAS
 st.markdown("### 📦 Active Shipments Track List Window")
 if f_df.empty:
-    st.info("No shipments records found in display memory. Open the Left Sidebar and drop your file in the Upload tab to populate records.")
+    st.info("No shipments records found in display memory. Drop a file inside the Upload tab inside the left sidebar to populate records.")
 else:
     # Set up exact pagination bounds parameters offsets
     ROWS_PER_PAGE = 100
