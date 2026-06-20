@@ -3,6 +3,7 @@ import pandas as pd
 import requests
 import json
 import time
+from datetime import datetime, date
 
 # Force high-efficiency 100% full-width viewport canvas constraints
 st.set_page_config(page_title="Auric Control Board", layout="wide")
@@ -26,7 +27,7 @@ st.markdown(
     .stat-val { color: #D4AF37; font-size: 20px; font-weight: bold; }
     .stat-lbl { color: #A0AEC0; font-size: 11px; text-transform: uppercase; }
     
-    div[data-baseweb="select"], div[data-baseweb="input"] {
+    div[data-baseweb="select"], div[data-baseweb="input"], div[data-baseweb="calendar"] {
         border: 1px solid #3B424D !important;
         background-color: #1A202C !important;
     }
@@ -173,7 +174,10 @@ with st.sidebar:
                                 if pd.isna(v) or str(v).strip().lower() in ['nan', 'nat', '#ref!', '#value!']:
                                     c_row[k] = "N/A"
                                 else:
-                                    c_row[k] = str(v).strip()
+                                    if k == 'doc_date' and hasattr(v, 'strftime'):
+                                        c_row[k] = v.strftime('%Y-%m-%d')
+                                    else:
+                                        c_row[k] = str(v).strip()
                             
                             if 'doc_net_value' in c_row and c_row['doc_net_value'] != "N/A":
                                 try: c_row['doc_net_value'] = str(round(float(c_row['doc_net_value']), 2))
@@ -240,27 +244,56 @@ with st.sidebar:
 # ========================================================
 st.markdown("### 🎛️ Live Search Filters & Summary Indicators", unsafe_allow_html=True)
 
-# Generate list option fields dynamically from active dataframe values
+# Generate dropdown lists dynamically from memory frame structures
 ptype_options = ["All Party-Types"]
 party_options = ["All Parties"]
 state_options = ["All States"]
+lr_status_options = ["All LR Statuses"]
+approval_options = ["All Order Statuses"]
+
+min_date_found = date(2025, 4, 1)
+max_date_found = date(2027, 3, 31)
 
 if not df.empty:
-    if 'party_type' in df.columns: ptype_options += sorted([str(x) for x in df['party_type'].dropna().unique() if str(x).strip() != ''])
-    if 'party_name' in df.columns: party_options += sorted([str(x) for x in df['party_name'].dropna().unique() if str(x).strip() != ''])
-    if 'party_state' in df.columns: state_options += sorted([str(x) for x in df['party_state'].dropna().unique() if str(x).strip() != ''])
+    if 'party_type' in df.columns: ptype_options += sorted([str(x) for x in df['party_type'].dropna().unique() if str(x).strip() != 'N/A' and str(x).strip() != ''])
+    if 'party_name' in df.columns: party_options += sorted([str(x) for x in df['party_name'].dropna().unique() if str(x).strip() != 'N/A' and str(x).strip() != ''])
+    if 'party_state' in df.columns: state_options += sorted([str(x) for x in df['party_state'].dropna().unique() if str(x).strip() != 'N/A' and str(x).strip() != ''])
+    if 'lr_current_status' in df.columns: lr_status_options += sorted([str(x) for x in df['lr_current_status'].dropna().unique() if str(x).strip() != 'N/A' and str(x).strip() != ''])
+    if 'order_approval_status' in df.columns: approval_options += sorted([str(x) for x in df['order_approval_status'].dropna().unique() if str(x).strip() != 'N/A' and str(x).strip() != ''])
+    
+    if 'doc_date' in df.columns:
+        clean_dates = pd.to_datetime(df['doc_date'], errors='coerce').dropna().dt.date
+        if not clean_dates.empty:
+            min_date_found = min(clean_dates)
+            max_date_found = max(clean_dates)
 
-# 1. THE TOP WORKSPACE MENUBAR SEARCH FILTERS CONTROLS (Restored Grid Setup)
-filter_col1, filter_col2, filter_col3, filter_col4 = st.columns([1.5, 1, 1, 1])
+# 1. HORIZONTAL CONTROL PANEL RE-ARCHITECTED LAYER
+filter_row1_col1, filter_row1_col2, filter_row1_col3, filter_row1_col4 = st.columns([1.5, 1, 1, 1])
+with filter_row1_col1:
+    search_str = st.text_input("Global Search", "", placeholder="🔍 Search Invoice, Consignee Name...", label_visibility="collapsed")
+with filter_row1_col2:
+    ptype_sel = st.selectbox("Party Type", options=ptype_options, index=0, label_visibility="collapsed")
+with filter_col3 := filter_row1_col3:
+    party_sel = st.selectbox("Party Name", options=party_options, index=0, label_visibility="collapsed")
+with filter_row1_col4:
+    state_sel = st.selectbox("State Region", options=state_options, index=0, label_visibility="collapsed")
 
-with filter_col1:
-    search_str = st.text_input("Global Search Input Field Tracker", "", placeholder="🔍 Type Invoice No, Client Name, or LR tracking ID to filter...", label_visibility="collapsed")
-with filter_col2:
-    ptype_sel = st.selectbox("Party Type Filter Menu", options=ptype_options, index=0, label_visibility="collapsed")
-with filter_col3:
-    party_sel = st.selectbox("Party Name Filter Menu", options=party_options, index=0, label_visibility="collapsed")
-with filter_col4:
-    state_sel = st.selectbox("State Region Filter Dropdown Menu", options=state_options, index=0, label_visibility="collapsed")
+# RESTORED LAYER 2: LR STATUS, APPROVAL MILESTONES & DATE RANGES SELECTORS
+st.markdown("<div style='margin-top:5px;'></div>", unsafe_allow_html=True)
+filter_row2_col1, filter_row2_col2, filter_row2_col3 = st.columns([1, 1, 1.2])
+
+with filter_row2_col1:
+    lr_status_sel = st.selectbox("LR Status Filter", options=lr_status_options, index=0, label_visibility="collapsed")
+with filter_row2_col2:
+    approval_sel = st.selectbox("Order Approval Status Filter", options=approval_options, index=0, label_visibility="collapsed")
+with filter_row2_col3:
+    date_range_selection = st.date_input(
+        "Billing Date Window Selection",
+        value=(min_date_found, max_date_found),
+        min_value=date(2024, 1, 1),
+        max_value=date(2028, 12, 31),
+        label_visibility="collapsed"
+    )
 
 # 📊 METRICS KPI SUMMARY INFRASTRUCTURE SECTION BAR
 st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
@@ -287,6 +320,15 @@ if not f_df.empty:
     if ptype_sel != "All Party-Types" and 'party_type' in f_df.columns: f_df = f_df[f_df['party_type'].astype(str) == ptype_sel]
     if party_sel != "All Parties" and 'party_name' in f_df.columns: f_df = f_df[f_df['party_name'].astype(str) == party_sel]
     if state_sel != "All States" and 'party_state' in f_df.columns: f_df = f_df[f_df['party_state'].astype(str) == state_sel]
+    if lr_status_sel != "All LR Statuses" and 'lr_current_status' in f_df.columns: f_df = f_df[f_df['lr_current_status'].astype(str) == lr_status_sel]
+    if approval_sel != "All Order Statuses" and 'order_approval_status' in f_df.columns: f_df = f_df[f_df['order_approval_status'].astype(str) == approval_sel]
+    
+    # Process date-range constraints parameters natively
+    if 'doc_date' in f_df.columns and isinstance(date_range_selection, tuple) and len(date_range_selection) == 2:
+        start_bound, end_bound = date_range_selection
+        f_df['temp_parsed_date'] = pd.to_datetime(f_df['doc_date'], errors='coerce').dt.date
+        f_df = f_df[(f_df['temp_parsed_date'] >= start_bound) & (f_df['temp_parsed_date'] <= end_bound)]
+        f_df = f_df.drop(columns=['temp_parsed_date'])
 
 # 2. CONTEXTUAL IN-LINE FORM FIELD CHANGES MODAL
 if st.session_state["selected_edit_doc"]:
@@ -335,7 +377,7 @@ if st.session_state["selected_edit_doc"]:
 # 3. THE HIGH-DENSITY PAGINATED WINDOW LIST DATA CANVAS
 st.markdown("### 📦 Active Shipments Track List Window")
 if f_df.empty:
-    st.info("No shipments records found in display memory. Drop a file inside the Upload tab inside the left sidebar to populate records.")
+    st.info("No shipments records found matching your active filter choices. Clear elements inputs parameters to reset view loops.")
 else:
     # Set up exact pagination bounds parameters offsets
     ROWS_PER_PAGE = 100
