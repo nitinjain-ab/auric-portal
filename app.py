@@ -108,15 +108,12 @@ if "active_apis_vault" not in st.session_state:
         {"provider": "DTDC Carrier Hook", "endpoint": "https://v1.dtdc.in/shipment/status"}
     ]
 
-# --- LIVE AUTO-RECOVERY PIPELINE LINK ---
-# This fixes the blank dashboard error by automatically pulling all database records if memory wipes out.
+# --- RECOVERY SCAN MODULE ENGINE ---
 def check_cloud_records():
     try:
-        # Step 1: Run a rapid test query to see if records exist in your Supabase table
         test_url = f"{BASE_API_ROUTE}?select=doc_number&limit=1"
         response = requests.get(test_url, headers=HTTP_HEADERS)
         if response.status_code == 200 and len(response.json()) > 0:
-            # Step 2: If found, pull down the full dataset directly into dashboard views
             full_url = f"{BASE_API_ROUTE}?select=*&order=doc_number"
             full_res = requests.get(full_url, headers=HTTP_HEADERS)
             if full_res.status_code == 200:
@@ -125,7 +122,6 @@ def check_cloud_records():
     except:
         return pd.DataFrame()
 
-# Automatically trigger the auto-recovery scan if display memory is empty
 if st.session_state["auric_master_dataframe"].empty:
     db_backup = check_cloud_records()
     if not db_backup.empty:
@@ -192,6 +188,7 @@ with st.sidebar:
             dropped_workbook = st.file_uploader("Drop active workbook (.xlsx):", type=["xlsx"])
             if dropped_workbook:
                 try:
+                    # Clean multi-row Excel headers
                     raw_excel_df = pd.read_excel(dropped_workbook, header=2)
                     raw_excel_df.columns = [str(c).strip().lower().replace('.', '').replace(' ', '_') for c in raw_excel_df.columns]
                     
@@ -208,6 +205,12 @@ with st.sidebar:
                     for db_field, key_matches in vocab_translations.items():
                         m_col = next((c for c in raw_excel_df.columns if c in key_matches or any(km in c for km in key_matches)), None)
                         if m_col: mapped_build_df[db_field] = raw_excel_df[m_col]
+                    
+                    # Fallback structural checks for strict columns mappings layout fields
+                    if 'doc_number' not in mapped_build_df.columns and len(raw_excel_df.columns) > 1:
+                        mapped_build_df['doc_number'] = raw_excel_df.iloc[:, 1]
+                    if 'party_name' not in mapped_build_df.columns and len(raw_excel_df.columns) > 5:
+                        mapped_build_df['party_name'] = raw_excel_df.iloc[:, 5]
                         
                     mapped_build_df = mapped_build_df.dropna(subset=['doc_number'])
                     total_rows_to_process = len(mapped_build_df)
@@ -222,20 +225,21 @@ with st.sidebar:
                                 except: c_row['doc_net_value'] = 0.0
                             sanitized_list.append(c_row)
                         
-                        # --- INITIALIZE VISUAL PROGRESS BARS ---
+                        # --- EXPLICIT DATA ASSIGNMENT STEP ---
+                        loaded_df = pd.DataFrame(sanitized_list)
+                        
                         progress_label_placeholder = st.empty()
                         progress_bar_placeholder = st.empty()
                         
                         if "1. Master File" in upload_tier_mode:
-                            st.session_state["auric_master_dataframe"] = pd.DataFrame(sanitized_list)
+                            # Force the clean data frame straight into the main dashboard memory cache
+                            st.session_state["auric_master_dataframe"] = loaded_df
                             
-                            # Clean, real-time incremental chunk-loader framework loop
                             CHUNK_SIZE = 200
                             for index in range(0, total_rows_to_process, CHUNK_SIZE):
                                 current_chunk_end = min(index + CHUNK_SIZE, total_rows_to_process)
                                 completion_percentage = float(current_chunk_end / total_rows_to_process)
                                 
-                                # Process tracking headers progress bars
                                 progress_label_placeholder.markdown(f"⏳ **Processing Seeding Matrix: {current_chunk_end} of {total_rows_to_process} rows**")
                                 progress_bar_placeholder.progress(completion_percentage)
                                 
@@ -284,7 +288,6 @@ with st.sidebar:
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("🚨 Wipe Cache Space"):
             st.session_state["auric_master_dataframe"] = pd.DataFrame()
-            # Also clear cloud rows database for an absolute fresh start if needed
             try: requests.delete(f"{BASE_API_ROUTE}?select=*", headers=HTTP_HEADERS)
             except: pass
             st.rerun()
@@ -415,34 +418,3 @@ else:
         f"</div>", 
         unsafe_allow_html=True
     )
-    
-    # Loop layout rows sequentially inserting serial numbers counters indices lines
-    serial_counter = start_offset + 1
-    for idx, row in paginated_df.iterrows():
-        inv_no = row.get('doc_number', 'N/A')
-        status_string = str(row.get('lr_current_status', 'In Transit')).strip()
-        
-        if status_string.lower() == "delivered":
-            status_html = f"<span class='status-badge-delivered'>{status_string}</span>"
-        else:
-            status_html = f"<span class='status-badge-transit'>{status_string}</span>"
-            
-        r_col_sno, r_col_act, r_col_inv, r_col_con, r_col_pty, r_col_dt, r_col_val, r_col_lr, r_col_disp, r_col_st, r_col_zone = st.columns([0.5, 0.5, 1, 1.5, 1.5, 1, 1, 1, 1, 1, 1])
-        
-        with r_col_sno: st.markdown(f"<p style='font-size:12px; margin:0; color:#A0AEC0;'>{serial_counter}</p>", unsafe_allow_html=True)
-        with r_col_act:
-            if st.button(f"📝 Edit", key=f"edit_{inv_no}_{idx}"):
-                st.session_state["selected_edit_doc"] = inv_no
-                st.rerun()
-        with r_col_inv: st.markdown(f"<p style='font-size:12px; margin:0;'>{inv_no}</p>", unsafe_allow_html=True)
-        with r_col_con: st.markdown(f"<p style='font-size:12px; margin:0;'>{row.get('consignee_name', 'N/A')}</p>", unsafe_allow_html=True)
-        with r_col_pty: st.markdown(f"<p style='font-size:12px; margin:0;'>{row.get('party_name', 'N/A')}</p>", unsafe_allow_html=True)
-        with r_col_dt: st.markdown(f"<p style='font-size:12px; margin:0;'>{row.get('doc_date', 'N/A')}</p>", unsafe_allow_html=True)
-        with r_col_val: st.markdown(f"<p style='font-size:12px; margin:0;'>{row.get('doc_net_value', '0.0')}</p>", unsafe_allow_html=True)
-        with r_col_lr: st.markdown(f"<p style='font-size:12px; margin:0;'>{row.get('lr_number', 'N/A')}</p>", unsafe_allow_html=True)
-        with r_col_disp: st.markdown(f"<p style='font-size:12px; margin:0;'>{row.get('final_lr_date', 'N/A')}</p>", unsafe_allow_html=True)
-        with r_col_st: st.markdown(f"<div style='font-size:12px; margin:0;'>{status_html}</div>", unsafe_allow_html=True)
-        with r_col_zone: st.markdown(f"<p style='font-size:12px; margin:0; color:#A0AEC0;'>{row.get('party_state', 'N/A')}</p>", unsafe_allow_html=True)
-        
-        st.markdown("<hr style='margin:2px 0px; border-color:#1E232A;'>", unsafe_allow_html=True)
-        serial_counter += 1
