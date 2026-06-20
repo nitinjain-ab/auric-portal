@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 import json
+import time
 from datetime import datetime, date
 
 # Force high-efficiency 100% full-width viewport canvas constraints
@@ -35,6 +36,11 @@ st.markdown(
         background: linear-gradient(135deg, #D4AF37 0%, #AA7C11 100%) !important;
         color: #0F1216 !important;
         font-weight: 600 !important;
+    }
+    
+    /* Ensure Streamlit's progress bar uses Auric gold */
+    div [data-testid="stProgressBar"] > div > div {
+        background-color: #D4AF37 !important;
     }
     
     .status-badge-delivered {
@@ -129,7 +135,6 @@ with st.sidebar:
             dropped_workbook = st.file_uploader("Drop tracking workbook file (.xlsx):", type=["xlsx"])
             if dropped_workbook:
                 try:
-                    # Clean workbook conversion strings instantly
                     raw_excel_df = pd.read_excel(dropped_workbook, header=2)
                     raw_excel_df = raw_excel_df.astype(str)
                     raw_excel_df.columns = [str(c).strip().lower().replace('.', '').replace(' ', '_') for c in raw_excel_df.columns]
@@ -177,34 +182,56 @@ with st.sidebar:
                         
                         loaded_df = pd.DataFrame(sanitized_list)
                         
+                        # Set streaming flags inside the application state configuration
+                        st.session_state["is_processing_stream"] = True
+                        st.session_state["processed_rows_count"] = 0
+                        st.session_state["total_rows_target"] = total_rows_to_process
+                        st.session_state["processing_message_label"] = "Initializing Workspace..."
+                        
                         if "1. Ingest Master" in upload_tier_mode:
                             st.session_state["auric_master_dataframe"] = loaded_df
                             
-                            try:
-                                post_headers = {**HTTP_HEADERS, "Prefer": "resolution=merge-duplicates, return=minimal"}
-                                requests.post(BASE_API_ROUTE, headers=post_headers, data=json.dumps(sanitized_list))
-                            except:
-                                pass
+                            # Push all data inside a clean, high-performance execution loop block
+                            CHUNK_SIZE = 250
+                            for index in range(0, total_rows_to_process, CHUNK_SIZE):
+                                current_chunk_end = min(index + CHUNK_SIZE, total_rows_to_process)
+                                st.session_state["processed_rows_count"] = current_chunk_end
+                                st.session_state["processing_message_label"] = f"Ingesting Master Manifest: Synchronizing row {current_chunk_end} of {total_rows_to_process}"
+                                
+                                try:
+                                    chunk_data = sanitized_list[index:current_chunk_end]
+                                    post_headers = {**HTTP_HEADERS, "Prefer": "resolution=merge-duplicates, return=minimal"}
+                                    requests.post(BASE_API_ROUTE, headers=post_headers, data=json.dumps(chunk_data))
+                                except:
+                                    pass
                             
+                            st.session_state["is_processing_stream"] = False
                             st.success(f"🎉 Success! {total_rows_to_process} rows loaded instantly.")
                         
                         elif "2. Update LR" in upload_tier_mode:
-                            for r in sanitized_list:
+                            for idx, r in enumerate(sanitized_list):
                                 if r.get('doc_number') and r.get('doc_number') != "N/A":
                                     st.session_state["auric_master_dataframe"].loc[st.session_state["auric_master_dataframe"]['doc_number'] == r['doc_number'], 'lr_current_status'] = r.get('lr_current_status', 'N/A')
+                                    st.session_state["processed_rows_count"] = idx + 1
+                                    st.session_state["processing_message_label"] = f"Writing Logistics Status Upgrades: {idx+1} of {total_rows_to_process}"
                                     try: requests.patch(f"{BASE_API_ROUTE}?doc_number=eq.{r['doc_number']}", headers=HTTP_HEADERS, json={"lr_current_status": r.get('lr_current_status', 'N/A')})
                                     except: pass
+                            st.session_state["is_processing_stream"] = False
                             st.success("Courier updates written.")
                         
                         elif "3. Update Orders" in upload_tier_mode:
-                            for r in sanitized_list:
+                            for idx, r in enumerate(sanitized_list):
                                 if r.get('doc_number') and r.get('doc_number') != "N/A":
                                     st.session_state["auric_master_dataframe"].loc[st.session_state["auric_master_dataframe"]['doc_number'] == r['doc_number'], 'order_approval_status'] = r.get('order_approval_status', 'N/A')
+                                    st.session_state["processed_rows_count"] = idx + 1
+                                    st.session_state["processing_message_label"] = f"Syncing System Approvals Milestones: {idx+1} of {total_rows_to_process}"
                                     try: requests.patch(f"{BASE_API_ROUTE}?doc_number=eq.{r['doc_number']}", headers=HTTP_HEADERS, json={"order_approval_status": r.get('order_approval_status', 'N/A')})
                                     except: pass
+                            st.session_state["is_processing_stream"] = False
                             st.success("Approvals updates written.")
                         st.rerun()
                 except Exception as ex:
+                    st.session_state["is_processing_stream"] = False
                     st.error(f"Incompatible format file: {ex}")
                     
         st.markdown("<br><hr style='border-color:#2B323C;'>", unsafe_allow_html=True)
@@ -218,6 +245,20 @@ with st.sidebar:
 # ========================================================
 # 📦 MAIN DATA CANVAS PANEL (100% MAIN COLUMN SCREEN SPACE)
 # ========================================================
+
+# --- PROGRESS INDICATOR HUB HUB CORE ---
+# This checks if an operations loop is active and prints a percentage bar right down to the layout canvas screen
+if st.session_state.get("is_processing_stream", False):
+    processed = st.session_state.get("processed_rows_count", 0)
+    total_tgt = st.session_state.get("total_rows_target", 1)
+    msg_lbl = st.session_state.get("processing_message_label", "Streaming data...")
+    calc_percentage = float(processed / total_tgt) if total_tgt > 0 else 0.0
+    
+    st.markdown(f"#### ⏳ System Operation In Progress: {int(calc_percentage * 100)}%")
+    st.progress(calc_percentage)
+    st.info(f"👉 Status Message: {msg_lbl}")
+    st.markdown("---")
+
 st.markdown("### 🎛️ Live Search Filters & Summary Indicators", unsafe_allow_html=True)
 
 # Generate dropdown lists dynamically from memory frame structures
@@ -227,8 +268,6 @@ state_options = ["All States"]
 lr_status_options = ["All LR Statuses"]
 approval_options = ["All Order Statuses"]
 
-# --- CRITICAL DATE AUTO-EXPANSION DETECTION LAYER ---
-# If your data is in 2026, the calendar dynamically scales outward to map it perfectly
 min_date_found = date(2024, 1, 1)
 max_date_found = date(2028, 12, 31)
 
