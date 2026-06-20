@@ -169,7 +169,7 @@ with st.sidebar:
                     st.rerun()
 
         with sidebar_tabs[2]:
-            st.markdown("<h4>Ingestion Execution Slicer Target Mode:</h4>", unsafe_allow_html=True)
+            st.markdown("<h4>Ingestion Slicer Target Mode:</h4>", unsafe_allow_html=True)
             upload_tier_mode = st.radio(
                 "Upload Splicer Mode Target:",
                 ["1. Master File Full Fresh Ingestion", "2. Only Update Courier LR Status", "3. Only Update Orders Approval Status"]
@@ -251,10 +251,15 @@ total_shipments = len(df)
 pending_count = len(df[df['lr_current_status'].astype(str).str.lower().str.contains('pending|transit', na=False)]) if 'lr_current_status' in df.columns else 0
 kerala_total = len(df[df['party_state'].astype(str).str.upper() == 'KERALA']) if 'party_state' in df.columns else 0
 
+# Get dynamic drop values natively from current active elements
+available_states_options = ["All States Selection"]
+if not df.empty and 'party_state' in df.columns:
+    available_states_options += sorted(df['party_state'].dropna().unique().tolist())
+
 with filter_col1:
     search_str = st.text_input("Global Dynamic Search Field Input", "", placeholder="Type Invoice No, Consignee Client Name, or LR Tracking ID to filter...", label_visibility="collapsed")
 with filter_col2:
-    state_sel = st.selectbox("State Region Filter", ["All States Selection"] + sorted(df['party_state'].dropna().unique().tolist()) if not df.empty and 'party_state' in df.columns else ["All States Selection"], label_visibility="collapsed")
+    state_sel = st.selectbox("State Region Filter", options=available_states_options, index=0, label_visibility="collapsed")
 with filter_col3:
     st.markdown(f'<div class="stat-box"><div class="stat-val">{total_shipments}</div><div class="stat-lbl">Shipments Matrix</div></div>', unsafe_allow_html=True)
 with filter_col4:
@@ -262,9 +267,9 @@ with filter_col4:
 with filter_col5:
     st.markdown(f'<div class="stat-box"><div class="stat-val">{kerala_total}</div><div class="stat-lbl">Kerala Nodes</div></div>', unsafe_allow_html=True)
 
-# Run cascading reductions masks evaluations queries
+# Run cascading reductions masks evaluations queries safely
 f_df = df.copy()
-if search_str:
+if not f_df.empty and search_str:
     sl = search_str.lower()
     mask = pd.Series(False, index=f_df.index)
     for col in ['doc_number', 'party_name', 'lr_number', 'consignee_name']:
@@ -272,7 +277,7 @@ if search_str:
             mask = mask | f_df[col].astype(str).str.lower().str.contains(sl, na=False)
     f_df = f_df[mask]
 
-if state_sel != "All States Selection" and 'party_state' in f_df.columns: 
+if not f_df.empty and state_sel != "All States Selection" and 'party_state' in f_df.columns: 
     f_df = f_df[f_df['party_state'] == state_sel]
 
 # 2. CONTEXTUAL IN-LINE FORM FIELD CHANGES MODAL
@@ -287,7 +292,7 @@ if st.session_state["selected_edit_doc"]:
     with edit_tabs[0]:
         ec1, ec2 = st.columns(2)
         with ec1: lr_val = st.text_input("New LR Status State Value:", value=str(tgt_row.get('lr_current_status', '')))
-        with ec2: rem_val = st.text_input("Internal Status Comment string remark:", value=str(tgt_row.get('lr_status_remark', '')))
+        with ec2: rem_val = st.text_input("Internal Status Comment remark:", value=str(tgt_row.get('lr_status_remark', '')))
         if st.button("Commit Manual Overwrites"):
             requests.patch(f"{BASE_API_ROUTE}?doc_number=eq.{tgt_id}", headers=HTTP_HEADERS, json={"lr_current_status": lr_val, "lr_status_remark": rem_val})
             st.session_state["auric_master_dataframe"].loc[st.session_state["auric_master_dataframe"]['doc_number'] == tgt_id, 'lr_current_status'] = lr_val
@@ -322,7 +327,7 @@ if st.session_state["selected_edit_doc"]:
 # 3. THE HIGH-DENSITY PAGINATED WINDOW LIST DATA CANVAS
 st.markdown("### 📦 Active Shipments Track List Window")
 if f_df.empty:
-    st.info("No shipments records match your current criteria parameters. Expand your Left Sidebar Tools to upload files data streams.")
+    st.info("No shipments records found in display memory. Drop a file inside the Upload tab inside the left sidebar to populate records.")
 else:
     # Set up exact pagination bounds parameters offsets
     ROWS_PER_PAGE = 100
