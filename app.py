@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import requests
 import json
-import time
 from datetime import datetime, date
 
 # Force high-efficiency 100% full-width viewport canvas constraints
@@ -36,10 +35,6 @@ st.markdown(
         background: linear-gradient(135deg, #D4AF37 0%, #AA7C11 100%) !important;
         color: #0F1216 !important;
         font-weight: 600 !important;
-    }
-    
-    div [data-testid="stProgressBar"] > div > div {
-        background-color: #D4AF37 !important;
     }
     
     .status-badge-delivered {
@@ -134,7 +129,7 @@ with st.sidebar:
             dropped_workbook = st.file_uploader("Drop tracking workbook file (.xlsx):", type=["xlsx"])
             if dropped_workbook:
                 try:
-                    # Step 1: Force sheet conversion to text-safe variables instantly
+                    # Clean workbook conversion strings instantly
                     raw_excel_df = pd.read_excel(dropped_workbook, header=2)
                     raw_excel_df = raw_excel_df.astype(str)
                     raw_excel_df.columns = [str(c).strip().lower().replace('.', '').replace(' ', '_') for c in raw_excel_df.columns]
@@ -159,13 +154,11 @@ with st.sidebar:
                         m_col = next((c for c in raw_excel_df.columns if c in key_matches or any(km in c for km in key_matches)), None)
                         if m_col: mapped_build_df[db_field] = raw_excel_df[m_col]
                     
-                    # Structural Fallbacks
                     if 'doc_number' not in mapped_build_df.columns and len(raw_excel_df.columns) > 1:
                         mapped_build_df['doc_number'] = raw_excel_df.iloc[:, 1]
                     if 'party_name' not in mapped_build_df.columns and len(raw_excel_df.columns) > 4:
                         mapped_build_df['party_name'] = raw_excel_df.iloc[:, 4]
                         
-                    # Filter out clean lines string sequences
                     mapped_build_df = mapped_build_df[mapped_build_df['doc_number'].astype(str).str.strip() != 'nan']
                     total_rows_to_process = len(mapped_build_df)
                     
@@ -182,34 +175,20 @@ with st.sidebar:
                                     c_row[k] = clean_val
                             sanitized_list.append(c_row)
                         
-                        # Instantly convert back to solid framework layouts dataframe object
                         loaded_df = pd.DataFrame(sanitized_list)
                         
                         if "1. Ingest Master" in upload_tier_mode:
-                            # CRITICAL FIX: Instantly lock local memory cache before hitting network requests loop
+                            # FLASH RE-STAGING INSTANT VISUALIZATION HANDSHAKE BARS
                             st.session_state["auric_master_dataframe"] = loaded_df
                             
-                            progress_label_placeholder = st.empty()
-                            progress_bar_placeholder = st.empty()
+                            # Fire bulk package write straight down to server fields arrays
+                            try:
+                                post_headers = {**HTTP_HEADERS, "Prefer": "resolution=merge-duplicates, return=minimal"}
+                                requests.post(BASE_API_ROUTE, headers=post_headers, data=json.dumps(sanitized_list))
+                            except:
+                                pass
                             
-                            CHUNK_SIZE = 200
-                            for index in range(0, total_rows_to_process, CHUNK_SIZE):
-                                current_chunk_end = min(index + CHUNK_SIZE, total_rows_to_process)
-                                completion_percentage = float(current_chunk_end / total_rows_to_process)
-                                
-                                progress_label_placeholder.markdown(f"⏳ **Writing Data Stream: {current_chunk_end} of {total_rows_to_process} rows**")
-                                progress_bar_placeholder.progress(completion_percentage)
-                                
-                                try:
-                                    chunk_data = sanitized_list[index:current_chunk_end]
-                                    post_headers = {**HTTP_HEADERS, "Prefer": "resolution=merge-duplicates, return=minimal"}
-                                    requests.post(BASE_API_ROUTE, headers=post_headers, data=json.dumps(chunk_data))
-                                except:
-                                    pass
-                                
-                            progress_label_placeholder.empty()
-                            progress_bar_placeholder.empty()
-                            st.success(f"🎉 Success! {total_rows_to_process} structural records loaded.")
+                            st.success(f"🎉 Success! {total_rows_to_process} rows loaded instantly.")
                         
                         elif "2. Update LR" in upload_tier_mode:
                             for r in sanitized_list:
@@ -217,7 +196,7 @@ with st.sidebar:
                                     st.session_state["auric_master_dataframe"].loc[st.session_state["auric_master_dataframe"]['doc_number'] == r['doc_number'], 'lr_current_status'] = r.get('lr_current_status', 'N/A')
                                     try: requests.patch(f"{BASE_API_ROUTE}?doc_number=eq.{r['doc_number']}", headers=HTTP_HEADERS, json={"lr_current_status": r.get('lr_current_status', 'N/A')})
                                     except: pass
-                            st.success("Courier updates synced.")
+                            st.success("Courier updates written.")
                         
                         elif "3. Update Orders" in upload_tier_mode:
                             for r in sanitized_list:
@@ -228,7 +207,7 @@ with st.sidebar:
                             st.success("Approvals updates written.")
                         st.rerun()
                 except Exception as ex:
-                    st.error(f"Incompatible file structure format layout template: {ex}")
+                    st.error(f"Incompatible format file: {ex}")
                     
         st.markdown("<br><hr style='border-color:#2B323C;'>", unsafe_allow_html=True)
         if st.button("🚨 Clear App Memory Workspace"):
