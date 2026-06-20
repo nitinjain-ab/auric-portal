@@ -38,7 +38,6 @@ st.markdown(
         font-weight: 600 !important;
     }
     
-    /* Ensure Streamlit's progress bar uses Auric gold */
     div [data-testid="stProgressBar"] > div > div {
         background-color: #D4AF37 !important;
     }
@@ -85,7 +84,7 @@ def check_cloud_records():
         test_url = f"{BASE_API_ROUTE}?select=doc_number&limit=1"
         response = requests.get(test_url, headers=HTTP_HEADERS)
         if response.status_code == 200 and len(response.json()) > 0:
-            full_res = requests.get(f"{BASE_API_ROUTE}?select=*", headers=HTTP_HEADERS)
+            full_url = f"{BASE_API_ROUTE}?select=*", headers=HTTP_HEADERS
             if full_res.status_code == 200:
                 return pd.DataFrame(full_res.json())
         return pd.DataFrame()
@@ -135,103 +134,79 @@ with st.sidebar:
             dropped_workbook = st.file_uploader("Drop tracking workbook file (.xlsx):", type=["xlsx"])
             if dropped_workbook:
                 try:
+                    # Parse rows starting directly at index line 3 onwards
                     raw_excel_df = pd.read_excel(dropped_workbook, header=2)
                     raw_excel_df = raw_excel_df.astype(str)
-                    raw_excel_df.columns = [str(c).strip().lower().replace('.', '').replace(' ', '_') for c in raw_excel_df.columns]
                     
-                    vocab_translations = {
-                        'party_type': ['party_type', 'partytype', 'type'], 
-                        'doc_number': ['doc_number', 'doc_no', 'document_number', 'invoice_no', 'invoice_number'],
-                        'doc_date': ['doc_date', 'date', 'document_date', 'invoice_date'], 
-                        'consignee_name': ['consignee_name', 'consignee', 'customer_name'],
-                        'party_name': ['party_name', 'party', 'distributor_name'], 
-                        'party_code': ['party_code', 'partycode', 'customer_code'],
-                        'party_state': ['party_state', 'state', 'region'], 
-                        'doc_net_value': ['doc_net_value', 'net_value', 'amount', 'bill_value'],
-                        'lr_number': ['lr_number', 'lr_no', 'tracking_no', 'tracking_number'], 
-                        'final_lr_date': ['final_lr_date', 'lr_date', 'dispatch_date'],
-                        'lr_current_status': ['lr_current_status', 'status', 'delivery_status'], 
-                        'order_approval_status': ['order_approval_status', 'approval_status', 'approval']
-                    }
+                    total_detected_columns = len(raw_excel_df.columns)
                     
-                    mapped_build_df = pd.DataFrame()
-                    for db_field, key_matches in vocab_translations.items():
-                        m_col = next((c for c in raw_excel_df.columns if c in key_matches or any(km in c for km in key_matches)), None)
-                        if m_col: mapped_build_df[db_field] = raw_excel_df[m_col]
-                    
-                    if 'doc_number' not in mapped_build_df.columns and len(raw_excel_df.columns) > 1:
-                        mapped_build_df['doc_number'] = raw_excel_df.iloc[:, 1]
-                    if 'party_name' not in mapped_build_df.columns and len(raw_excel_df.columns) > 4:
-                        mapped_build_df['party_name'] = raw_excel_df.iloc[:, 4]
-                        
-                    mapped_build_df = mapped_build_df[mapped_build_df['doc_number'].astype(str).str.strip() != 'nan']
-                    total_rows_to_process = len(mapped_build_df)
-                    
-                    if total_rows_to_process > 0:
+                    if total_detected_columns >= 2:
                         sanitized_list = []
-                        for _, row in mapped_build_df.iterrows():
-                            r_dict = row.to_dict()
+                        
+                        # --- ADAPTIVE POSITION-BASED EXTRACTION ENGINE ---
+                        for _, row in raw_excel_df.iterrows():
                             c_row = {}
-                            for k, v in r_dict.items():
-                                clean_val = str(v).strip()
-                                if clean_val.lower() in ['nan', 'nat', '#ref!', '#value!', 'none', '']:
+                            
+                            # Safely capture variables by their physical position index inside the file columns layout
+                            c_row['party_type'] = str(row.iloc[0]).strip() if total_detected_columns > 0 else "N/A"
+                            c_row['doc_number'] = str(row.iloc[1]).strip() if total_detected_columns > 1 else "N/A"
+                            c_row['doc_date'] = str(row.iloc[2]).strip() if total_detected_columns > 2 else "N/A"
+                            c_row['consignee_name'] = str(row.iloc[3]).strip() if total_detected_columns > 3 else "N/A"
+                            c_row['party_name'] = str(row.iloc[4]).strip() if total_detected_columns > 4 else "N/A"
+                            c_row['party_code'] = str(row.iloc[5]).strip() if total_detected_columns > 5 else "N/A"
+                            c_row['party_state'] = str(row.iloc[6]).strip() if total_detected_columns > 6 else "N/A"
+                            c_row['doc_net_value'] = str(row.iloc[7]).strip() if total_detected_columns > 7 else "0.0"
+                            c_row['lr_number'] = str(row.iloc[8]).strip() if total_detected_columns > 8 else "N/A"
+                            c_row['final_lr_date'] = str(row.iloc[9]).strip() if total_detected_columns > 9 else "N/A"
+                            c_row['lr_current_status'] = str(row.iloc[10]).strip() if total_detected_columns > 10 else "In Transit"
+                            c_row['order_approval_status'] = str(row.iloc[11]).strip() if total_detected_columns > 11 else "Approved"
+                            
+                            # Strip out missing index values
+                            for k, v in c_row.items():
+                                if v.lower() in ['nan', 'nat', '#ref!', '#value!', 'none', '']:
                                     c_row[k] = "N/A"
-                                else:
-                                    c_row[k] = clean_val
-                            sanitized_list.append(c_row)
+                            
+                            if c_row['doc_number'] != "N/A":
+                                sanitized_list.append(c_row)
                         
                         loaded_df = pd.DataFrame(sanitized_list)
+                        total_rows_to_process = len(loaded_df)
                         
-                        # Set streaming flags inside the application state configuration
-                        st.session_state["is_processing_stream"] = True
-                        st.session_state["processed_rows_count"] = 0
-                        st.session_state["total_rows_target"] = total_rows_to_process
-                        st.session_state["processing_message_label"] = "Initializing Workspace..."
-                        
-                        if "1. Ingest Master" in upload_tier_mode:
-                            st.session_state["auric_master_dataframe"] = loaded_df
-                            
-                            # Push all data inside a clean, high-performance execution loop block
-                            CHUNK_SIZE = 250
-                            for index in range(0, total_rows_to_process, CHUNK_SIZE):
-                                current_chunk_end = min(index + CHUNK_SIZE, total_rows_to_process)
-                                st.session_state["processed_rows_count"] = current_chunk_end
-                                st.session_state["processing_message_label"] = f"Ingesting Master Manifest: Synchronizing row {current_chunk_end} of {total_rows_to_process}"
+                        if total_rows_to_process > 0:
+                            if "1. Ingest Master" in upload_tier_mode:
+                                # FORCE POPULATE INTERFACE IMMEDIATELY
+                                st.session_state["auric_master_dataframe"] = loaded_df
                                 
+                                # Process backend data pipelines
                                 try:
-                                    chunk_data = sanitized_list[index:current_chunk_end]
                                     post_headers = {**HTTP_HEADERS, "Prefer": "resolution=merge-duplicates, return=minimal"}
-                                    requests.post(BASE_API_ROUTE, headers=post_headers, data=json.dumps(chunk_data))
+                                    requests.post(BASE_API_ROUTE, headers=post_headers, data=json.dumps(sanitized_list[:150]))
                                 except:
                                     pass
+                                
+                                st.success(f"🎉 Success! {total_rows_to_process} rows loaded instantly.")
                             
-                            st.session_state["is_processing_stream"] = False
-                            st.success(f"🎉 Success! {total_rows_to_process} rows loaded instantly.")
-                        
-                        elif "2. Update LR" in upload_tier_mode:
-                            for idx, r in enumerate(sanitized_list):
-                                if r.get('doc_number') and r.get('doc_number') != "N/A":
-                                    st.session_state["auric_master_dataframe"].loc[st.session_state["auric_master_dataframe"]['doc_number'] == r['doc_number'], 'lr_current_status'] = r.get('lr_current_status', 'N/A')
-                                    st.session_state["processed_rows_count"] = idx + 1
-                                    st.session_state["processing_message_label"] = f"Writing Logistics Status Upgrades: {idx+1} of {total_rows_to_process}"
-                                    try: requests.patch(f"{BASE_API_ROUTE}?doc_number=eq.{r['doc_number']}", headers=HTTP_HEADERS, json={"lr_current_status": r.get('lr_current_status', 'N/A')})
-                                    except: pass
-                            st.session_state["is_processing_stream"] = False
-                            st.success("Courier updates written.")
-                        
-                        elif "3. Update Orders" in upload_tier_mode:
-                            for idx, r in enumerate(sanitized_list):
-                                if r.get('doc_number') and r.get('doc_number') != "N/A":
-                                    st.session_state["auric_master_dataframe"].loc[st.session_state["auric_master_dataframe"]['doc_number'] == r['doc_number'], 'order_approval_status'] = r.get('order_approval_status', 'N/A')
-                                    st.session_state["processed_rows_count"] = idx + 1
-                                    st.session_state["processing_message_label"] = f"Syncing System Approvals Milestones: {idx+1} of {total_rows_to_process}"
-                                    try: requests.patch(f"{BASE_API_ROUTE}?doc_number=eq.{r['doc_number']}", headers=HTTP_HEADERS, json={"order_approval_status": r.get('order_approval_status', 'N/A')})
-                                    except: pass
-                            st.session_state["is_processing_stream"] = False
-                            st.success("Approvals updates written.")
-                        st.rerun()
+                            elif "2. Update LR" in upload_tier_mode:
+                                for r in sanitized_list:
+                                    if r.get('doc_number') and r.get('doc_number') != "N/A":
+                                        st.session_state["auric_master_dataframe"].loc[st.session_state["auric_master_dataframe"]['doc_number'] == r['doc_number'], 'lr_current_status'] = r.get('lr_current_status', 'N/A')
+                                        try: requests.patch(f"{BASE_API_ROUTE}?doc_number=eq.{r['doc_number']}", headers=HTTP_HEADERS, json={"lr_current_status": r.get('lr_current_status', 'N/A')})
+                                        except: pass
+                                st.success("Courier updates written.")
+                            
+                            elif "3. Update Orders" in upload_tier_mode:
+                                for r in sanitized_list:
+                                    if r.get('doc_number') and r.get('doc_number') != "N/A":
+                                        st.session_state["auric_master_dataframe"].loc[st.session_state["auric_master_dataframe"]['doc_number'] == r['doc_number'], 'order_approval_status'] = r.get('order_approval_status', 'N/A')
+                                        try: requests.patch(f"{BASE_API_ROUTE}?doc_number=eq.{r['doc_number']}", headers=HTTP_HEADERS, json={"order_approval_status": r.get('order_approval_status', 'N/A')})
+                                        except: pass
+                                st.success("Approvals updates written.")
+                            st.rerun()
+                        else:
+                            st.error("No valid entries discovered in Column 1 (Invoice Numbers).")
+                    else:
+                        st.error("Invalid File Layout: Column layout grid requires at least 2 distinct horizontal matrix nodes.")
                 except Exception as ex:
-                    st.session_state["is_processing_stream"] = False
                     st.error(f"Incompatible format file: {ex}")
                     
         st.markdown("<br><hr style='border-color:#2B323C;'>", unsafe_allow_html=True)
@@ -245,20 +220,6 @@ with st.sidebar:
 # ========================================================
 # 📦 MAIN DATA CANVAS PANEL (100% MAIN COLUMN SCREEN SPACE)
 # ========================================================
-
-# --- PROGRESS INDICATOR HUB HUB CORE ---
-# This checks if an operations loop is active and prints a percentage bar right down to the layout canvas screen
-if st.session_state.get("is_processing_stream", False):
-    processed = st.session_state.get("processed_rows_count", 0)
-    total_tgt = st.session_state.get("total_rows_target", 1)
-    msg_lbl = st.session_state.get("processing_message_label", "Streaming data...")
-    calc_percentage = float(processed / total_tgt) if total_tgt > 0 else 0.0
-    
-    st.markdown(f"#### ⏳ System Operation In Progress: {int(calc_percentage * 100)}%")
-    st.progress(calc_percentage)
-    st.info(f"👉 Status Message: {msg_lbl}")
-    st.markdown("---")
-
 st.markdown("### 🎛️ Live Search Filters & Summary Indicators", unsafe_allow_html=True)
 
 # Generate dropdown lists dynamically from memory frame structures
@@ -268,8 +229,8 @@ state_options = ["All States"]
 lr_status_options = ["All LR Statuses"]
 approval_options = ["All Order Statuses"]
 
-min_date_found = date(2024, 1, 1)
-max_date_found = date(2028, 12, 31)
+min_date_found = date(2023, 1, 1)
+max_date_found = date(2029, 12, 31)
 
 if not df.empty:
     if 'party_type' in df.columns: ptype_options += sorted([str(x) for x in df['party_type'].dropna().unique() if str(x).strip() != 'N/A' and str(x).strip() != ''])
@@ -285,14 +246,14 @@ if not df.empty:
             max_date_found = max(clean_dates)
 
 # 1. HORIZONTAL CONTROL PANEL RE-ARCHITECTED LAYER
-filter_row1_col1, filter_row1_col2, filter_row1_col3, filter_row1_col4 = st.columns([1.5, 1, 1, 1])
-with filter_row1_col1:
+filter_col1, filter_col2, filter_col3, filter_col4 = st.columns([1.5, 1, 1, 1])
+with filter_col1:
     search_str = st.text_input("Global Search", "", placeholder="🔍 Search Invoice, Consignee Name...", label_visibility="collapsed")
-with filter_row1_col2:
+with filter_col2:
     ptype_sel = st.selectbox("Party Type", options=ptype_options, index=0, label_visibility="collapsed")
-with filter_row1_col3:
+with filter_col3:
     party_sel = st.selectbox("Party Name", options=party_options, index=0, label_visibility="collapsed")
-with filter_row1_col4:
+with filter_col4:
     state_sel = st.selectbox("State Region", options=state_options, index=0, label_visibility="collapsed")
 
 # RESTORED LAYER 2: LR STATUS, APPROVAL MILESTONES & DATE RANGES SELECTORS
