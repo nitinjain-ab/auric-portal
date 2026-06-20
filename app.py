@@ -273,7 +273,7 @@ with filter_row1_col1:
     search_str = st.text_input("Global Search", "", placeholder="🔍 Search Invoice, Consignee Name...", label_visibility="collapsed")
 with filter_row1_col2:
     ptype_sel = st.selectbox("Party Type", options=ptype_options, index=0, label_visibility="collapsed")
-with filter_col3 := filter_row1_col3:
+with filter_row1_col3:
     party_sel = st.selectbox("Party Name", options=party_options, index=0, label_visibility="collapsed")
 with filter_row1_col4:
     state_sel = st.selectbox("State Region", options=state_options, index=0, label_visibility="collapsed")
