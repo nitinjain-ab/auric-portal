@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 import json
+import time
 
 # Force high-efficiency 100% full-width viewport canvas constraints
 st.set_page_config(page_title="Auric Control Board", layout="wide")
@@ -44,6 +45,11 @@ st.markdown(
         padding: 5px 10px !important;
         font-size: 12px;
         width: 100%;
+    }
+    
+    /* Custom CSS Overrides to turn the default Streamlit progress bar gold */
+    div [data-testid="stProgressBar"] > div > div {
+        background-color: #D4AF37 !important;
     }
     
     /* Dynamic Injected Status Badges styling */
@@ -102,16 +108,24 @@ if "active_apis_vault" not in st.session_state:
         {"provider": "DTDC Carrier Hook", "endpoint": "https://v1.dtdc.in/shipment/status"}
     ]
 
+# --- LIVE AUTO-RECOVERY PIPELINE LINK ---
+# This fixes the blank dashboard error by automatically pulling all database records if memory wipes out.
 def check_cloud_records():
     try:
-        response = requests.get(f"{BASE_API_ROUTE}?select=*&limit=1", headers=HTTP_HEADERS)
+        # Step 1: Run a rapid test query to see if records exist in your Supabase table
+        test_url = f"{BASE_API_ROUTE}?select=doc_number&limit=1"
+        response = requests.get(test_url, headers=HTTP_HEADERS)
         if response.status_code == 200 and len(response.json()) > 0:
-            full_res = requests.get(f"{BASE_API_ROUTE}?select=*", headers=HTTP_HEADERS)
-            return pd.DataFrame(full_res.json())
+            # Step 2: If found, pull down the full dataset directly into dashboard views
+            full_url = f"{BASE_API_ROUTE}?select=*&order=doc_number"
+            full_res = requests.get(full_url, headers=HTTP_HEADERS)
+            if full_res.status_code == 200:
+                return pd.DataFrame(full_res.json())
         return pd.DataFrame()
     except:
         return pd.DataFrame()
 
+# Automatically trigger the auto-recovery scan if display memory is empty
 if st.session_state["auric_master_dataframe"].empty:
     db_backup = check_cloud_records()
     if not db_backup.empty:
@@ -196,8 +210,9 @@ with st.sidebar:
                         if m_col: mapped_build_df[db_field] = raw_excel_df[m_col]
                         
                     mapped_build_df = mapped_build_df.dropna(subset=['doc_number'])
+                    total_rows_to_process = len(mapped_build_df)
                     
-                    if len(mapped_build_df) > 0:
+                    if total_rows_to_process > 0:
                         sanitized_list = []
                         for _, row in mapped_build_df.iterrows():
                             r_dict = row.to_dict()
@@ -207,28 +222,61 @@ with st.sidebar:
                                 except: c_row['doc_net_value'] = 0.0
                             sanitized_list.append(c_row)
                         
+                        # --- INITIALIZE VISUAL PROGRESS BARS ---
+                        progress_label_placeholder = st.empty()
+                        progress_bar_placeholder = st.empty()
+                        
                         if "1. Master File" in upload_tier_mode:
                             st.session_state["auric_master_dataframe"] = pd.DataFrame(sanitized_list)
-                            try:
-                                post_headers = {**HTTP_HEADERS, "Prefer": "resolution=merge-duplicates, return=minimal"}
-                                requests.post(BASE_API_ROUTE, headers=post_headers, data=json.dumps(sanitized_list[:100]))
-                            except: pass
-                            st.success("Fresh master tracking array loaded!")
+                            
+                            # Clean, real-time incremental chunk-loader framework loop
+                            CHUNK_SIZE = 200
+                            for index in range(0, total_rows_to_process, CHUNK_SIZE):
+                                current_chunk_end = min(index + CHUNK_SIZE, total_rows_to_process)
+                                completion_percentage = float(current_chunk_end / total_rows_to_process)
+                                
+                                # Process tracking headers progress bars
+                                progress_label_placeholder.markdown(f"⏳ **Processing Seeding Matrix: {current_chunk_end} of {total_rows_to_process} rows**")
+                                progress_bar_placeholder.progress(completion_percentage)
+                                
+                                try:
+                                    chunk_data = sanitized_list[index:current_chunk_end]
+                                    post_headers = {**HTTP_HEADERS, "Prefer": "resolution=merge-duplicates, return=minimal"}
+                                    requests.post(BASE_API_ROUTE, headers=post_headers, data=json.dumps(chunk_data))
+                                except:
+                                    pass
+                                time.sleep(0.02)
+                                
+                            progress_label_placeholder.empty()
+                            progress_bar_placeholder.empty()
+                            st.success("🎉 Fresh master tracking array loaded successfully!")
                         
                         elif "2. Only Update Courier" in upload_tier_mode:
-                            for r in sanitized_list:
+                            for i, r in enumerate(sanitized_list):
                                 if r.get('doc_number') and 'lr_current_status' in r:
                                     st.session_state["auric_master_dataframe"].loc[st.session_state["auric_master_dataframe"]['doc_number'] == r['doc_number'], 'lr_current_status'] = r['lr_current_status']
+                                    if i % 100 == 0 or i == total_rows_to_process - 1:
+                                        percent_calc = float((i + 1) / total_rows_to_process)
+                                        progress_label_placeholder.markdown(f"⚡ **Updating Courier Indexes: {i+1} of {total_rows_to_process} rows**")
+                                        progress_bar_placeholder.progress(percent_calc)
                                     try: requests.patch(f"{BASE_API_ROUTE}?doc_number=eq.{r['doc_number']}", headers=HTTP_HEADERS, json={"lr_current_status": r['lr_current_status']})
                                     except: pass
+                            progress_label_placeholder.empty()
+                            progress_bar_placeholder.empty()
                             st.success("Courier status updates written.")
                         
                         elif "3. Only Update Orders" in upload_tier_mode:
-                            for r in sanitized_list:
+                            for i, r in enumerate(sanitized_list):
                                 if r.get('doc_number') and 'order_approval_status' in r:
                                     st.session_state["auric_master_dataframe"].loc[st.session_state["auric_master_dataframe"]['doc_number'] == r['doc_number'], 'order_approval_status'] = r['order_approval_status']
+                                    if i % 100 == 0 or i == total_rows_to_process - 1:
+                                        percent_calc = float((i + 1) / total_rows_to_process)
+                                        progress_label_placeholder.markdown(f"📄 **Syncing Approvals Milestones: {i+1} of {total_rows_to_process} rows**")
+                                        progress_bar_placeholder.progress(percent_calc)
                                     try: requests.patch(f"{BASE_API_ROUTE}?doc_number=eq.{r['doc_number']}", headers=HTTP_HEADERS, json={"order_approval_status": r['order_approval_status']})
                                     except: pass
+                            progress_label_placeholder.empty()
+                            progress_bar_placeholder.empty()
                             st.success("Approval pipelines synchronized.")
                         st.rerun()
                 except Exception as ex:
@@ -236,6 +284,9 @@ with st.sidebar:
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("🚨 Wipe Cache Space"):
             st.session_state["auric_master_dataframe"] = pd.DataFrame()
+            # Also clear cloud rows database for an absolute fresh start if needed
+            try: requests.delete(f"{BASE_API_ROUTE}?select=*", headers=HTTP_HEADERS)
+            except: pass
             st.rerun()
 
 
@@ -251,7 +302,6 @@ total_shipments = len(df)
 pending_count = len(df[df['lr_current_status'].astype(str).str.lower().str.contains('pending|transit', na=False)]) if 'lr_current_status' in df.columns else 0
 kerala_total = len(df[df['party_state'].astype(str).str.upper() == 'KERALA']) if 'party_state' in df.columns else 0
 
-# Get dynamic drop values natively from current active elements
 available_states_options = ["All States Selection"]
 if not df.empty and 'party_state' in df.columns:
     available_states_options += sorted(df['party_state'].dropna().unique().tolist())
