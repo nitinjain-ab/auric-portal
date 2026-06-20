@@ -134,7 +134,9 @@ with st.sidebar:
             dropped_workbook = st.file_uploader("Drop tracking workbook file (.xlsx):", type=["xlsx"])
             if dropped_workbook:
                 try:
+                    # Step 1: Force sheet conversion to text-safe variables instantly
                     raw_excel_df = pd.read_excel(dropped_workbook, header=2)
+                    raw_excel_df = raw_excel_df.astype(str)
                     raw_excel_df.columns = [str(c).strip().lower().replace('.', '').replace(' ', '_') for c in raw_excel_df.columns]
                     
                     vocab_translations = {
@@ -157,12 +159,14 @@ with st.sidebar:
                         m_col = next((c for c in raw_excel_df.columns if c in key_matches or any(km in c for km in key_matches)), None)
                         if m_col: mapped_build_df[db_field] = raw_excel_df[m_col]
                     
+                    # Structural Fallbacks
                     if 'doc_number' not in mapped_build_df.columns and len(raw_excel_df.columns) > 1:
                         mapped_build_df['doc_number'] = raw_excel_df.iloc[:, 1]
                     if 'party_name' not in mapped_build_df.columns and len(raw_excel_df.columns) > 4:
                         mapped_build_df['party_name'] = raw_excel_df.iloc[:, 4]
                         
-                    mapped_build_df = mapped_build_df.dropna(subset=['doc_number'])
+                    # Filter out clean lines string sequences
+                    mapped_build_df = mapped_build_df[mapped_build_df['doc_number'].astype(str).str.strip() != 'nan']
                     total_rows_to_process = len(mapped_build_df)
                     
                     if total_rows_to_process > 0:
@@ -171,28 +175,24 @@ with st.sidebar:
                             r_dict = row.to_dict()
                             c_row = {}
                             for k, v in r_dict.items():
-                                if pd.isna(v) or str(v).strip().lower() in ['nan', 'nat', '#ref!', '#value!']:
+                                clean_val = str(v).strip()
+                                if clean_val.lower() in ['nan', 'nat', '#ref!', '#value!', 'none', '']:
                                     c_row[k] = "N/A"
                                 else:
-                                    if k == 'doc_date' and hasattr(v, 'strftime'):
-                                        c_row[k] = v.strftime('%Y-%m-%d')
-                                    else:
-                                        c_row[k] = str(v).strip()
-                            
-                            if 'doc_net_value' in c_row and c_row['doc_net_value'] != "N/A":
-                                try: c_row['doc_net_value'] = str(round(float(c_row['doc_net_value']), 2))
-                                except: pass
+                                    c_row[k] = clean_val
                             sanitized_list.append(c_row)
                         
+                        # Instantly convert back to solid framework layouts dataframe object
                         loaded_df = pd.DataFrame(sanitized_list)
                         
-                        progress_label_placeholder = st.empty()
-                        progress_bar_placeholder = st.empty()
-                        
                         if "1. Ingest Master" in upload_tier_mode:
+                            # CRITICAL FIX: Instantly lock local memory cache before hitting network requests loop
                             st.session_state["auric_master_dataframe"] = loaded_df
                             
-                            CHUNK_SIZE = 250
+                            progress_label_placeholder = st.empty()
+                            progress_bar_placeholder = st.empty()
+                            
+                            CHUNK_SIZE = 200
                             for index in range(0, total_rows_to_process, CHUNK_SIZE):
                                 current_chunk_end = min(index + CHUNK_SIZE, total_rows_to_process)
                                 completion_percentage = float(current_chunk_end / total_rows_to_process)
@@ -206,7 +206,6 @@ with st.sidebar:
                                     requests.post(BASE_API_ROUTE, headers=post_headers, data=json.dumps(chunk_data))
                                 except:
                                     pass
-                                time.sleep(0.01)
                                 
                             progress_label_placeholder.empty()
                             progress_bar_placeholder.empty()
@@ -214,7 +213,7 @@ with st.sidebar:
                         
                         elif "2. Update LR" in upload_tier_mode:
                             for r in sanitized_list:
-                                if r.get('doc_number'):
+                                if r.get('doc_number') and r.get('doc_number') != "N/A":
                                     st.session_state["auric_master_dataframe"].loc[st.session_state["auric_master_dataframe"]['doc_number'] == r['doc_number'], 'lr_current_status'] = r.get('lr_current_status', 'N/A')
                                     try: requests.patch(f"{BASE_API_ROUTE}?doc_number=eq.{r['doc_number']}", headers=HTTP_HEADERS, json={"lr_current_status": r.get('lr_current_status', 'N/A')})
                                     except: pass
@@ -222,7 +221,7 @@ with st.sidebar:
                         
                         elif "3. Update Orders" in upload_tier_mode:
                             for r in sanitized_list:
-                                if r.get('doc_number'):
+                                if r.get('doc_number') and r.get('doc_number') != "N/A":
                                     st.session_state["auric_master_dataframe"].loc[st.session_state["auric_master_dataframe"]['doc_number'] == r['doc_number'], 'order_approval_status'] = r.get('order_approval_status', 'N/A')
                                     try: requests.patch(f"{BASE_API_ROUTE}?doc_number=eq.{r['doc_number']}", headers=HTTP_HEADERS, json={"order_approval_status": r.get('order_approval_status', 'N/A')})
                                     except: pass
