@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 import json
+import time
 from datetime import datetime, date
 
 # Force high-efficiency 100% full-width viewport canvas constraints
@@ -37,6 +38,10 @@ st.markdown(
         font-weight: 600 !important;
     }
     
+    div [data-testid="stProgressBar"] > div > div {
+        background-color: #D4AF37 !important;
+    }
+    
     .status-badge-delivered {
         background-color: #1E4620 !important;
         color: #FFFFFF !important;
@@ -67,7 +72,7 @@ HTTP_HEADERS = {
     "Prefer": "return=representation"
 }
 
-# --- STAGING SESSIONS INITIALIZATIONS ---
+# --- INITIALIZE RUNTIME APP STATES ---
 if "auric_master_dataframe" not in st.session_state:
     st.session_state["auric_master_dataframe"] = pd.DataFrame()
 
@@ -86,6 +91,7 @@ def check_cloud_records():
     except:
         return pd.DataFrame()
 
+# Background recovery checkpoint cache pull
 if st.session_state["auric_master_dataframe"].empty:
     db_backup = check_cloud_records()
     if not db_backup.empty:
@@ -126,86 +132,98 @@ with st.sidebar:
             dropped_workbook = st.file_uploader("Drop tracking workbook file (.xlsx):", type=["xlsx"])
             if dropped_workbook:
                 try:
-                    # Look dynamically for data rows by auto-skipping top blank spacer titles
-                    raw_excel_df = pd.read_excel(dropped_workbook, header=None)
-                    
-                    # Strip empty tracking rows dynamically
-                    raw_excel_df = raw_excel_df.dropna(how='all')
-                    
-                    # Auto-discover where the true table headers rows actually start
+                    # Find header row by seeking table labels data sets
+                    raw_df_test = pd.read_excel(dropped_workbook, header=None, nrows=10)
                     header_row_idx = 0
-                    for idx, row in raw_excel_df.iterrows():
+                    for idx, row in raw_df_test.iterrows():
                         row_strs = [str(x).lower().strip() for x in row.values]
                         if any('invoice' in x or 'doc' in x or 'party' in x or 'consignee' in x for x in row_strs):
                             header_row_idx = idx
                             break
                     
-                    # Re-read the layout cleanly with discovered header maps indices boundaries
-                    clean_excel_df = pd.read_excel(dropped_workbook, header=header_row_idx)
-                    clean_excel_df = clean_excel_df.dropna(subset=[clean_excel_df.columns[1]])
-                    clean_excel_df = clean_excel_df.astype(str)
+                    # Parse the true table frame data layout structure cleanly
+                    raw_excel_df = pd.read_excel(dropped_workbook, header=header_row_idx)
+                    raw_excel_df = raw_excel_df.astype(str)
+                    total_cols = len(raw_excel_df.columns)
                     
-                    # Force clean column keys strings labels fields maps
-                    clean_excel_df.columns = [str(c).strip().lower().replace('.', '').replace(' ', '_') for c in clean_excel_df.columns]
-                    total_cols = len(clean_excel_df.columns)
-                    
-                    sanitized_list = []
-                    for _, row in clean_excel_df.iterrows():
-                        c_row = {}
-                        c_row['party_type'] = str(row.iloc[0]).strip() if total_cols > 0 else "N/A"
-                        c_row['doc_number'] = str(row.iloc[1]).strip() if total_cols > 1 else "N/A"
-                        c_row['doc_date'] = str(row.iloc[2]).strip() if total_cols > 2 else "N/A"
-                        c_row['consignee_name'] = str(row.iloc[3]).strip() if total_cols > 3 else "N/A"
-                        c_row['party_name'] = str(row.iloc[4]).strip() if total_cols > 4 else "N/A"
-                        c_row['party_code'] = str(row.iloc[5]).strip() if total_cols > 5 else "N/A"
-                        c_row['party_state'] = str(row.iloc[6]).strip() if total_cols > 6 else "N/A"
-                        c_row['doc_net_value'] = str(row.iloc[7]).strip() if total_cols > 7 else "0.0"
-                        c_row['lr_number'] = str(row.iloc[8]).strip() if total_cols > 8 else "N/A"
-                        c_row['final_lr_date'] = str(row.iloc[9]).strip() if total_cols > 9 else "N/A"
-                        c_row['lr_current_status'] = str(row.iloc[10]).strip() if total_cols > 10 else "In Transit"
-                        c_row['order_approval_status'] = str(row.iloc[11]).strip() if total_cols > 11 else "Approved"
+                    if total_cols >= 2:
+                        sanitized_list = []
                         
-                        for k, v in c_row.items():
-                            if v.lower() in ['nan', 'nat', '#ref!', '#value!', 'none', '']:
-                                c_row[k] = "N/A"
+                        # Set up status placeholders
+                        status_label = st.empty()
+                        status_bar = st.progress(0.0)
                         
-                        if c_row['doc_number'] != "N/A":
-                            sanitized_list.append(c_row)
-                    
-                    loaded_df = pd.DataFrame(sanitized_list)
-                    total_rows_to_process = len(loaded_df)
-                    
-                    if total_rows_to_process > 0:
-                        if "1. Ingest Master" in upload_tier_mode:
-                            # FORCE LOCAL MEMORY ASSIGNMENT TO GUARANTEE INSTANT DISPLAY
-                            st.session_state["auric_master_dataframe"] = loaded_df
+                        total_rows = len(raw_excel_df)
+                        
+                        for i, row in raw_excel_df.iterrows():
+                            c_row = {}
+                            c_row['party_type'] = str(row.iloc[0]).strip() if total_cols > 0 else "N/A"
+                            c_row['doc_number'] = str(row.iloc[1]).strip() if total_cols > 1 else "N/A"
+                            c_row['doc_date'] = str(row.iloc[2]).strip() if total_cols > 2 else "N/A"
+                            c_row['consignee_name'] = str(row.iloc[3]).strip() if total_cols > 3 else "N/A"
+                            c_row['party_name'] = str(row.iloc[4]).strip() if total_cols > 4 else "N/A"
+                            c_row['party_code'] = str(row.iloc[5]).strip() if total_cols > 5 else "N/A"
+                            c_row['party_state'] = str(row.iloc[6]).strip() if total_cols > 6 else "N/A"
+                            c_row['doc_net_value'] = str(row.iloc[7]).strip() if total_cols > 7 else "0.0"
+                            c_row['lr_number'] = str(row.iloc[8]).strip() if total_cols > 8 else "N/A"
+                            c_row['final_lr_date'] = str(row.iloc[9]).strip() if total_cols > 9 else "N/A"
+                            c_row['lr_current_status'] = str(row.iloc[10]).strip() if total_cols > 10 else "In Transit"
+                            c_row['order_approval_status'] = str(row.iloc[11]).strip() if total_cols > 11 else "Approved"
                             
-                            try:
-                                post_headers = {**HTTP_HEADERS, "Prefer": "resolution=merge-duplicates, return=minimal"}
-                                requests.post(BASE_API_ROUTE, headers=post_headers, data=json.dumps(sanitized_list))
-                            except:
-                                pass
+                            for k, v in c_row.items():
+                                if v.lower() in ['nan', 'nat', '#ref!', '#value!', 'none', '']:
+                                    c_row[k] = "N/A"
                             
-                            st.success(f"🎉 Success! {total_rows_to_process} rows loaded instantly.")
+                            if c_row['doc_number'] != "N/A":
+                                sanitized_list.append(c_row)
+                                
+                            # Dynamic processing status bar updates 
+                            if i % 100 == 0 or i == total_rows - 1:
+                                progress_pct = float((i + 1) / total_rows)
+                                status_label.markdown(f"⏳ **Processing Spreadsheet Data: {i+1} of {total_rows} rows mapped**")
+                                status_bar.progress(progress_pct)
                         
-                        elif "2. Update LR" in upload_tier_mode:
-                            for r in sanitized_list:
-                                if r.get('doc_number') and r.get('doc_number') != "N/A":
-                                    st.session_state["auric_master_dataframe"].loc[st.session_state["auric_master_dataframe"]['doc_number'] == r['doc_number'], 'lr_current_status'] = r.get('lr_current_status', 'N/A')
-                                    try: requests.patch(f"{BASE_API_ROUTE}?doc_number=eq.{r['doc_number']}", headers=HTTP_HEADERS, json={"lr_current_status": r.get('lr_current_status', 'N/A')})
-                                    except: pass
-                            st.success("Courier updates written.")
+                        loaded_df = pd.DataFrame(sanitized_list)
+                        total_rows_to_process = len(loaded_df)
                         
-                        elif "3. Update Orders" in upload_tier_mode:
-                            for r in sanitized_list:
-                                if r.get('doc_number') and r.get('doc_number') != "N/A":
-                                    st.session_state["auric_master_dataframe"].loc[st.session_state["auric_master_dataframe"]['doc_number'] == r['doc_number'], 'order_approval_status'] = r.get('order_approval_status', 'N/A')
-                                    try: requests.patch(f"{BASE_API_ROUTE}?doc_number=eq.{r['doc_number']}", headers=HTTP_HEADERS, json={"order_approval_status": r.get('order_approval_status', 'N/A')})
-                                    except: pass
-                            st.success("Approvals updates written.")
-                        st.rerun()
+                        if total_rows_to_process > 0:
+                            if "1. Ingest Master" in upload_tier_mode:
+                                # DOCK TO SCREEN LOCAL CACHE IMMEDIATELY TO GUARANTEE RENDER
+                                st.session_state["auric_master_dataframe"] = loaded_df
+                                
+                                # Send package downward silently to background servers without locking views
+                                try:
+                                    post_headers = {**HTTP_HEADERS, "Prefer": "resolution=merge-duplicates, return=minimal"}
+                                    requests.post(BASE_API_ROUTE, headers=post_headers, data=json.dumps(sanitized_list))
+                                except:
+                                    pass
+                                
+                                status_label.empty()
+                                status_bar.empty()
+                                st.success(f"🎉 Success! {total_rows_to_process} rows loaded instantly.")
+                            
+                            elif "2. Update LR" in upload_tier_mode:
+                                for r in sanitized_list:
+                                    if r.get('doc_number') and r.get('doc_number') != "N/A":
+                                        st.session_state["auric_master_dataframe"].loc[st.session_state["auric_master_dataframe"]['doc_number'] == r['doc_number'], 'lr_current_status'] = r.get('lr_current_status', 'N/A')
+                                        try: requests.patch(f"{BASE_API_ROUTE}?doc_number=eq.{r['doc_number']}", headers=HTTP_HEADERS, json={"lr_current_status": r.get('lr_current_status', 'N/A')})
+                                        except: pass
+                                st.success("Courier status flags updated.")
+                            
+                            elif "3. Update Orders" in upload_tier_mode:
+                                for r in sanitized_list:
+                                    if r.get('doc_number') and r.get('doc_number') != "N/A":
+                                        st.session_state["auric_master_dataframe"].loc[st.session_state["auric_master_dataframe"]['doc_number'] == r['doc_number'], 'order_approval_status'] = r.get('order_approval_status', 'N/A')
+                                        try: requests.patch(f"{BASE_API_ROUTE}?doc_number=eq.{r['doc_number']}", headers=HTTP_HEADERS, json={"order_approval_status": r.get('order_approval_status', 'N/A')})
+                                        except: pass
+                                st.success("Approvals flags updated.")
+                            st.rerun()
+                        else:
+                            st.error("No valid entries discovered inside invoice column.")
+                    else:
+                        st.error("Invalid spreadsheet layout node boundaries mapping parameters.")
                 except Exception as ex:
-                    st.error(f"Incompatible format file: {ex}")
+                    st.error(f"Workbook error processing: {ex}")
                     
         st.markdown("<br><hr style='border-color:#2B323C;'>", unsafe_allow_html=True)
         if st.button("🚨 Clear App Memory Workspace"):
@@ -242,7 +260,7 @@ if not df.empty:
             min_date_found = min(clean_dates)
             max_date_found = max(clean_dates)
 
-# 1. HORIZONTAL CONTROL PANEL RE-ARCHITECTED LAYER
+# 1. HORIZONTAL CONTROL PANEL FILTER ROW
 filter_col1, filter_col2, filter_col3, filter_col4 = st.columns([1.5, 1, 1, 1])
 with filter_col1:
     search_str = st.text_input("Global Search", "", placeholder="🔍 Search Invoice, Consignee Name...", label_visibility="collapsed")
@@ -281,7 +299,7 @@ with stat_col1: st.markdown(f'<div class="stat-box"><div class="stat-val">{total
 with stat_col2: st.markdown(f'<div class="stat-box"><div class="stat-val">{pending_count}</div><div class="stat-lbl">In-Transit Delivery Pipeline</div></div>', unsafe_allow_html=True)
 with stat_col3: st.markdown(f'<div class="stat-box"><div class="stat-val">{kerala_total}</div><div class="stat-lbl">Active Kerala Nodes</div></div>', unsafe_allow_html=True)
 
-# Run cascading reductions masks evaluations queries safely with string fallback safety layers
+# Filter processing layers with reset bypass fallbacks
 f_df = df.copy()
 if not f_df.empty:
     if search_str:
@@ -303,7 +321,7 @@ if not f_df.empty:
         f_df = f_df[(f_df['temp_parsed_date'] >= start_bound) & (f_df['temp_parsed_date'] <= end_bound)]
         f_df = f_df.drop(columns=['temp_parsed_date'])
 
-# 2. CONTEXTUAL IN-LINE FORM FIELD CHANGES MODAL
+# 2. CONTEXTUAL IN-LINE FORM MODAL
 if st.session_state["selected_edit_doc"]:
     tgt_id = st.session_state["selected_edit_doc"]
     tgt_row = df[df['doc_number'] == tgt_id].iloc[0]
