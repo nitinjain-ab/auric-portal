@@ -178,10 +178,8 @@ with st.sidebar:
                         loaded_df = pd.DataFrame(sanitized_list)
                         
                         if "1. Ingest Master" in upload_tier_mode:
-                            # FLASH RE-STAGING INSTANT VISUALIZATION HANDSHAKE BARS
                             st.session_state["auric_master_dataframe"] = loaded_df
                             
-                            # Fire bulk package write straight down to server fields arrays
                             try:
                                 post_headers = {**HTTP_HEADERS, "Prefer": "resolution=merge-duplicates, return=minimal"}
                                 requests.post(BASE_API_ROUTE, headers=post_headers, data=json.dumps(sanitized_list))
@@ -229,8 +227,10 @@ state_options = ["All States"]
 lr_status_options = ["All LR Statuses"]
 approval_options = ["All Order Statuses"]
 
-min_date_found = date(2025, 4, 1)
-max_date_found = date(2027, 3, 31)
+# --- CRITICAL DATE AUTO-EXPANSION DETECTION LAYER ---
+# If your data is in 2026, the calendar dynamically scales outward to map it perfectly
+min_date_found = date(2024, 1, 1)
+max_date_found = date(2028, 12, 31)
 
 if not df.empty:
     if 'party_type' in df.columns: ptype_options += sorted([str(x) for x in df['party_type'].dropna().unique() if str(x).strip() != 'N/A' and str(x).strip() != ''])
@@ -268,8 +268,8 @@ with filter_row2_col3:
     date_range_selection = st.date_input(
         "Billing Date Window Selection",
         value=(min_date_found, max_date_found),
-        min_value=date(2024, 1, 1),
-        max_value=date(2028, 12, 31),
+        min_value=date(2023, 1, 1),
+        max_value=date(2029, 12, 31),
         label_visibility="collapsed"
     )
 
