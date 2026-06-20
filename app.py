@@ -84,7 +84,8 @@ def check_cloud_records():
         test_url = f"{BASE_API_ROUTE}?select=doc_number&limit=1"
         response = requests.get(test_url, headers=HTTP_HEADERS)
         if response.status_code == 200 and len(response.json()) > 0:
-            full_url = f"{BASE_API_ROUTE}?select=*", headers=HTTP_HEADERS
+            full_url = f"{BASE_API_ROUTE}?select=*"
+            full_res = requests.get(full_url, headers=HTTP_HEADERS)
             if full_res.status_code == 200:
                 return pd.DataFrame(full_res.json())
         return pd.DataFrame()
@@ -147,7 +148,6 @@ with st.sidebar:
                         for _, row in raw_excel_df.iterrows():
                             c_row = {}
                             
-                            # Safely capture variables by their physical position index inside the file columns layout
                             c_row['party_type'] = str(row.iloc[0]).strip() if total_detected_columns > 0 else "N/A"
                             c_row['doc_number'] = str(row.iloc[1]).strip() if total_detected_columns > 1 else "N/A"
                             c_row['doc_date'] = str(row.iloc[2]).strip() if total_detected_columns > 2 else "N/A"
@@ -180,7 +180,7 @@ with st.sidebar:
                                 # Process backend data pipelines
                                 try:
                                     post_headers = {**HTTP_HEADERS, "Prefer": "resolution=merge-duplicates, return=minimal"}
-                                    requests.post(BASE_API_ROUTE, headers=post_headers, data=json.dumps(sanitized_list[:150]))
+                                    requests.post(BASE_API_ROUTE, headers=post_headers, data=json.dumps(sanitized_list))
                                 except:
                                     pass
                                 
