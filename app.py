@@ -2,56 +2,80 @@ import streamlit as st
 import pandas as pd
 import requests
 import json
-import time
 from datetime import datetime, date
 
-# Force high-efficiency 100% full-width viewport canvas constraints
+# Force wide page viewport canvas layouts constraints
 st.set_page_config(page_title="Auric Control Board", layout="wide")
 
-# --- CLEAN PREMIUM ENTERPRISE VISUAL THEME ---
+# --- CLEAN PREMIUM ENTERPRISE VISUAL THEME ENGINE (WITH FIXED HEADERS) ---
 st.markdown(
     """
     <style>
     .stApp { background-color: #0F1216; color: #E2E8F0; }
-    h1 { color: #D4AF37 !important; font-family: 'Segoe UI', sans-serif; font-weight: 600; margin-bottom: 0px; }
-    h3 { color: #E5C158 !important; font-weight: 500; margin-top: 5px; border-bottom: 1px solid #2D3748; padding-bottom: 6px; margin-bottom: 15px; }
-    h4 { color: #D4AF37 !important; font-weight: 500; margin-top: 10px; margin-bottom: 5px; }
+    
+    /* Sticky Top Header Area Setup */
+    .sticky-header-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        background-color: #0F1216;
+        z-index: 999;
+        padding: 10px 2rem;
+        border-bottom: 2px solid #2B323C;
+    }
+    
+    /* Push content layout down so it doesn't get hidden behind the frozen top bar */
+    .main-scroll-body {
+        margin-top: 290px;
+    }
+    
+    /* Scrollable Sheet Table Window Viewport */
+    .grid-window-viewport {
+        background-color: #11151C;
+        border: 1px solid #2B323C;
+        border-radius: 6px;
+        height: 520px;
+        overflow-y: auto;
+        padding-right: 5px;
+    }
+    
+    h1 { color: #D4AF37 !important; font-family: 'Segoe UI', sans-serif; font-weight: 600; margin-bottom: 0px; font-size: 26px; }
+    h3 { color: #E5C158 !important; font-weight: 500; margin-top: 2px; margin-bottom: 8px; font-size: 16px; }
     
     .stat-box {
         background: #161B22;
         border: 1px solid #2B323C;
-        border-radius: 6px;
-        padding: 8px;
+        border-radius: 4px;
+        padding: 4px 8px;
         text-align: center;
     }
-    .stat-val { color: #D4AF37; font-size: 20px; font-weight: bold; }
-    .stat-lbl { color: #A0AEC0; font-size: 11px; text-transform: uppercase; }
+    .stat-val { color: #D4AF37; font-size: 18px; font-weight: bold; }
+    .stat-lbl { color: #A0AEC0; font-size: 10px; text-transform: uppercase; }
     
     div[data-baseweb="select"], div[data-baseweb="input"], div[data-baseweb="calendar"] {
         border: 1px solid #3B424D !important;
         background-color: #1A202C !important;
     }
     
-    .stButton>button {
-        background: linear-gradient(135deg, #D4AF37 0%, #AA7C11 100%) !important;
-        color: #0F1216 !important;
+    /* Small Compact Edit Link Action Styling */
+    .compact-edit-btn button {
+        background: transparent !important;
+        color: #D4AF37 !important;
         font-weight: 600 !important;
+        border: 1px solid #AA7C11 !important;
+        padding: 1px 6px !important;
+        font-size: 10px !important;
+        border-radius: 3px !important;
+        height: auto !important;
+        width: auto !important;
+    }
+    .compact-edit-btn button:hover {
+        background: #AA7C11 !important;
+        color: #0F1216 !important;
     }
     
-    div [data-testid="stProgressBar"] > div > div {
-        background-color: #D4AF37 !important;
-    }
-    
-    .status-badge-delivered {
-        background-color: #1E4620 !important;
-        color: #FFFFFF !important;
-        padding: 2px 8px;
-        border-radius: 4px;
-        font-weight: 600;
-    }
-    .status-badge-transit {
-        color: #E5C158 !important;
-    }
+    div.block-container { padding-top: 0rem; padding-bottom: 0rem; }
     </style>
     """, unsafe_allow_html=True
 )
@@ -61,7 +85,7 @@ try:
     SUPABASE_URL = st.secrets["connections"]["supabase"]["supabase_url"].strip().rstrip('/')
     SUPABASE_KEY = st.secrets["connections"]["supabase"]["supabase_key"].strip()
 except Exception:
-    st.error("Missing configuration credentials inside secrets panel.")
+    st.error("Missing configuration credentials inside secrets vault.")
     st.stop()
 
 BASE_API_ROUTE = f"{SUPABASE_URL}/rest/v1/shipments"
@@ -72,7 +96,7 @@ HTTP_HEADERS = {
     "Prefer": "return=representation"
 }
 
-# --- INITIALIZE RUNTIME APP STATES ---
+# --- INITIALIZE RUNTIME CORE STATE VAULTS ---
 if "auric_master_dataframe" not in st.session_state:
     st.session_state["auric_master_dataframe"] = pd.DataFrame()
 
@@ -91,7 +115,6 @@ def check_cloud_records():
     except:
         return pd.DataFrame()
 
-# Background recovery checkpoint cache pull
 if st.session_state["auric_master_dataframe"].empty:
     db_backup = check_cloud_records()
     if not db_backup.empty:
@@ -99,40 +122,32 @@ if st.session_state["auric_master_dataframe"].empty:
 
 df = st.session_state["auric_master_dataframe"]
 
-# --- BRANDING BAR HEADER ---
-st.title("✨ Auric Control Board")
-st.caption("Operational Logistics & Shipment Manifest Tracking System")
-st.markdown("<hr style='margin-top:4px; margin-bottom:12px; border-color:#2B323C;'>", unsafe_allow_html=True)
-
 
 # ========================================================
-# ⚙️ LEFT SIDEBAR: HIDDEN MANAGEMENT CONTROLS VAULT
+# ⚙️ LEFT SIDEBAR: RETRACTABLE CONTROLS VAULT
 # ========================================================
 with st.sidebar:
-    st.markdown("### 🛠️ Advanced System Tools")
-    show_advanced_settings = st.checkbox("Show Settings Controls", value=True)
+    st.markdown("### 🛠️ System Tools Panel")
+    show_advanced_settings = st.checkbox("Show Ingestion Settings", value=True)
     
     if show_advanced_settings:
         st.markdown("---")
-        sidebar_tabs = st.tabs(["👤 Users Panel", "🔑 API Gateway", "📥 Workbook Upload"])
+        sidebar_tabs = st.tabs(["👤 Users Profile", "🔑 API Handoff", "📥 Data Upload"])
         
         with sidebar_tabs[0]:
-            st.markdown("<h4>Active Access Matrices</h4>", unsafe_allow_html=True)
-            
+            st.caption("Active operational context profiles synced.")
         with sidebar_tabs[1]:
-            st.markdown("<h4>API Carrier Pipelines</h4>", unsafe_allow_html=True)
-
+            st.caption("Integration gateway sync nodes active.")
+            
         with sidebar_tabs[2]:
-            st.markdown("<h4>Spreadsheet Processing Engine</h4>", unsafe_allow_html=True)
             upload_tier_mode = st.radio(
-                "Upload Splicer Mode Target:",
-                ["1. Ingest Master Tracker Sheet", "2. Update LR Logistics Only", "3. Update Orders Approval Status Only"]
+                "Pipeline Target context:",
+                ["1. Fresh Ingest Master Sheet", "2. Update Courier LR Only", "3. Update Order Approvals Only"]
             )
             
-            dropped_workbook = st.file_uploader("Drop tracking workbook file (.xlsx):", type=["xlsx"])
+            dropped_workbook = st.file_uploader("Drop master spreadsheet file (.xlsx):", type=["xlsx"])
             if dropped_workbook:
                 try:
-                    # Find header row by seeking table labels data sets
                     raw_df_test = pd.read_excel(dropped_workbook, header=None, nrows=10)
                     header_row_idx = 0
                     for idx, row in raw_df_test.iterrows():
@@ -141,34 +156,33 @@ with st.sidebar:
                             header_row_idx = idx
                             break
                     
-                    # Parse the true table frame data layout structure cleanly
                     raw_excel_df = pd.read_excel(dropped_workbook, header=header_row_idx)
                     raw_excel_df = raw_excel_df.astype(str)
                     total_cols = len(raw_excel_df.columns)
                     
                     if total_cols >= 2:
                         sanitized_list = []
+                        total_rows = len(raw_excel_df)
                         
-                        # Set up status placeholders
+                        # PROGRESS BAR GENERATOR PANEL
                         status_label = st.empty()
                         status_bar = st.progress(0.0)
                         
-                        total_rows = len(raw_excel_df)
-                        
                         for i, row in raw_excel_df.iterrows():
-                            c_row = {}
-                            c_row['party_type'] = str(row.iloc[0]).strip() if total_cols > 0 else "N/A"
-                            c_row['doc_number'] = str(row.iloc[1]).strip() if total_cols > 1 else "N/A"
-                            c_row['doc_date'] = str(row.iloc[2]).strip() if total_cols > 2 else "N/A"
-                            c_row['consignee_name'] = str(row.iloc[3]).strip() if total_cols > 3 else "N/A"
-                            c_row['party_name'] = str(row.iloc[4]).strip() if total_cols > 4 else "N/A"
-                            c_row['party_code'] = str(row.iloc[5]).strip() if total_cols > 5 else "N/A"
-                            c_row['party_state'] = str(row.iloc[6]).strip() if total_cols > 6 else "N/A"
-                            c_row['doc_net_value'] = str(row.iloc[7]).strip() if total_cols > 7 else "0.0"
-                            c_row['lr_number'] = str(row.iloc[8]).strip() if total_cols > 8 else "N/A"
-                            c_row['final_lr_date'] = str(row.iloc[9]).strip() if total_cols > 9 else "N/A"
-                            c_row['lr_current_status'] = str(row.iloc[10]).strip() if total_cols > 10 else "In Transit"
-                            c_row['order_approval_status'] = str(row.iloc[11]).strip() if total_cols > 11 else "Approved"
+                            c_row = {
+                                'party_type': str(row.iloc[0]).strip() if total_cols > 0 else "N/A",
+                                'doc_number': str(row.iloc[1]).strip() if total_cols > 1 else "N/A",
+                                'doc_date': str(row.iloc[2]).strip() if total_cols > 2 else "N/A",
+                                'consignee_name': str(row.iloc[3]).strip() if total_cols > 3 else "N/A",
+                                'party_name': str(row.iloc[4]).strip() if total_cols > 4 else "N/A",
+                                'party_code': str(row.iloc[5]).strip() if total_cols > 5 else "N/A",
+                                'party_state': str(row.iloc[6]).strip() if total_cols > 6 else "N/A",
+                                'doc_net_value': str(row.iloc[7]).strip() if total_cols > 7 else "0.0",
+                                'lr_number': str(row.iloc[8]).strip() if total_cols > 8 else "N/A",
+                                'final_lr_date': str(row.iloc[9]).strip() if total_cols > 9 else "N/A",
+                                'lr_current_status': str(row.iloc[10]).strip() if total_cols > 10 else "In Transit",
+                                'order_approval_status': str(row.iloc[11]).strip() if total_cols > 11 else "Approved"
+                            }
                             
                             for k, v in c_row.items():
                                 if v.lower() in ['nan', 'nat', '#ref!', '#value!', 'none', '']:
@@ -176,9 +190,9 @@ with st.sidebar:
                             
                             if c_row['doc_number'] != "N/A":
                                 sanitized_list.append(c_row)
-                                
-                            # Dynamic processing status bar updates 
-                            if i % 100 == 0 or i == total_rows - 1:
+                            
+                            # Real-Time Count Update
+                            if i % 200 == 0 or i == total_rows - 1:
                                 progress_pct = float((i + 1) / total_rows)
                                 status_label.markdown(f"⏳ **Processing Spreadsheet Data: {i+1} of {total_rows} rows mapped**")
                                 status_bar.progress(progress_pct)
@@ -187,153 +201,137 @@ with st.sidebar:
                         total_rows_to_process = len(loaded_df)
                         
                         if total_rows_to_process > 0:
-                            if "1. Ingest Master" in upload_tier_mode:
-                                # DOCK TO SCREEN LOCAL CACHE IMMEDIATELY TO GUARANTEE RENDER
+                            if "1. Fresh Ingest" in upload_tier_mode:
                                 st.session_state["auric_master_dataframe"] = loaded_df
-                                
-                                # Send package downward silently to background servers without locking views
                                 try:
                                     post_headers = {**HTTP_HEADERS, "Prefer": "resolution=merge-duplicates, return=minimal"}
                                     requests.post(BASE_API_ROUTE, headers=post_headers, data=json.dumps(sanitized_list))
-                                except:
-                                    pass
+                                except: pass
                                 
-                                status_label.empty()
-                                status_bar.empty()
-                                st.success(f"🎉 Success! {total_rows_to_process} rows loaded instantly.")
-                            
-                            elif "2. Update LR" in upload_tier_mode:
+                            elif "2. Update Courier" in upload_tier_mode:
                                 for r in sanitized_list:
                                     if r.get('doc_number') and r.get('doc_number') != "N/A":
                                         st.session_state["auric_master_dataframe"].loc[st.session_state["auric_master_dataframe"]['doc_number'] == r['doc_number'], 'lr_current_status'] = r.get('lr_current_status', 'N/A')
                                         try: requests.patch(f"{BASE_API_ROUTE}?doc_number=eq.{r['doc_number']}", headers=HTTP_HEADERS, json={"lr_current_status": r.get('lr_current_status', 'N/A')})
                                         except: pass
-                                st.success("Courier status flags updated.")
-                            
-                            elif "3. Update Orders" in upload_tier_mode:
+                                        
+                            elif "3. Update Order" in upload_tier_mode:
                                 for r in sanitized_list:
                                     if r.get('doc_number') and r.get('doc_number') != "N/A":
                                         st.session_state["auric_master_dataframe"].loc[st.session_state["auric_master_dataframe"]['doc_number'] == r['doc_number'], 'order_approval_status'] = r.get('order_approval_status', 'N/A')
                                         try: requests.patch(f"{BASE_API_ROUTE}?doc_number=eq.{r['doc_number']}", headers=HTTP_HEADERS, json={"order_approval_status": r.get('order_approval_status', 'N/A')})
                                         except: pass
-                                st.success("Approvals flags updated.")
+                            
+                            # Clean progress elements from screen immediately when loop halts
+                            status_label.empty()
+                            status_bar.empty()
+                            st.sidebar.success(f"🎉 Core matrix initialization finalized cleanly!")
                             st.rerun()
-                        else:
-                            st.error("No valid entries discovered inside invoice column.")
-                    else:
-                        st.error("Invalid spreadsheet layout node boundaries mapping parameters.")
                 except Exception as ex:
-                    st.error(f"Workbook error processing: {ex}")
+                    st.sidebar.error(f"Incompatible format file: {ex}")
                     
-        st.markdown("<br><hr style='border-color:#2B323C;'>", unsafe_allow_html=True)
-        if st.button("🚨 Clear App Memory Workspace"):
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("🚨 Clear Memory Workspace"):
             st.session_state["auric_master_dataframe"] = pd.DataFrame()
             try: requests.delete(f"{BASE_API_ROUTE}?select=*", headers=HTTP_HEADERS)
             except: pass
             st.rerun()
 
 
-# ========================================================
-# 📦 MAIN DATA CANVAS PANEL (100% MAIN COLUMN SCREEN SPACE)
-# ========================================================
-st.markdown("### 🎛️ Live Search Filters & Summary Indicators", unsafe_allow_html=True)
+# =========================================================
+# 🏛️ STICKY ANCHORED CONTAINER: FILTERS BAR (FROZEN TOP)
+# =========================================================
+st.markdown('<div class="sticky-header-container">', unsafe_allow_html=True)
 
+header_left, header_right = st.columns([2, 1])
+with header_left:
+    st.markdown("<h1>✨ Auric Dispatch Control Dashboard</h1>", unsafe_allow_html=True)
+with header_right:
+    st.markdown(f"<div style='text-align:right; font-size:12px; color:#A0AEC0; margin-top:10px;'>Runtime Sync: <b>Connected Secure Table Table Table</b></div>", unsafe_allow_html=True)
+
+st.markdown("<h3>🎛️ Live Search Filters & Summary Indicators</h3>", unsafe_allow_html=True)
+
+# Generate dynamic list drop metrics arrays parameters models fallback settings values options lists
 ptype_options = ["All Party-Types"]
 party_options = ["All Parties"]
 state_options = ["All States"]
 lr_status_options = ["All LR Statuses"]
 approval_options = ["All Order Statuses"]
 
-min_date_found = date(2023, 1, 1)
-max_date_found = date(2029, 12, 31)
+min_date_found, max_date_found = date(2023, 1, 1), date(2029, 12, 31)
 
 if not df.empty:
-    if 'party_type' in df.columns: ptype_options += sorted([str(x) for x in df['party_type'].dropna().unique() if str(x).strip() != 'N/A' and str(x).strip() != ''])
-    if 'party_name' in df.columns: party_options += sorted([str(x) for x in df['party_name'].dropna().unique() if str(x).strip() != 'N/A' and str(x).strip() != ''])
-    if 'party_state' in df.columns: state_options += sorted([str(x) for x in df['party_state'].dropna().unique() if str(x).strip() != 'N/A' and str(x).strip() != ''])
-    if 'lr_current_status' in df.columns: lr_status_options += sorted([str(x) for x in df['lr_current_status'].dropna().unique() if str(x).strip() != 'N/A' and str(x).strip() != ''])
-    if 'order_approval_status' in df.columns: approval_options += sorted([str(x) for x in df['order_approval_status'].dropna().unique() if str(x).strip() != 'N/A' and str(x).strip() != ''])
-    
+    if 'party_type' in df.columns: ptype_options += sorted([str(x) for x in df['party_type'].dropna().unique() if str(x).strip() not in ['N/A', '']])
+    if 'party_name' in df.columns: party_options += sorted([str(x) for x in df['party_name'].dropna().unique() if str(x).strip() not in ['N/A', '']])
+    if 'party_state' in df.columns: state_options += sorted([str(x) for x in df['party_state'].dropna().unique() if str(x).strip() not in ['N/A', '']])
+    if 'lr_current_status' in df.columns: lr_status_options += sorted([str(x) for x in df['lr_current_status'].dropna().unique() if str(x).strip() not in ['N/A', '']])
+    if 'order_approval_status' in df.columns: approval_options += sorted([str(x) for x in df['order_approval_status'].dropna().unique() if str(x).strip() not in ['N/A', '']])
     if 'doc_date' in df.columns:
         clean_dates = pd.to_datetime(df['doc_date'], errors='coerce').dropna().dt.date
-        if not clean_dates.empty:
-            min_date_found = min(clean_dates)
-            max_date_found = max(clean_dates)
+        if not clean_dates.empty: min_date_found, max_date_found = min(clean_dates), max(clean_dates)
 
-# 1. HORIZONTAL CONTROL PANEL FILTER ROW
-filter_col1, filter_col2, filter_col3, filter_col4 = st.columns([1.5, 1, 1, 1])
-with filter_col1:
-    search_str = st.text_input("Global Search", "", placeholder="🔍 Search Invoice, Consignee Name...", label_visibility="collapsed")
-with filter_col2:
-    ptype_sel = st.selectbox("Party Type", options=ptype_options, index=0, label_visibility="collapsed")
-with filter_col3:
-    party_sel = st.selectbox("Party Name", options=party_options, index=0, label_visibility="collapsed")
-with filter_col4:
-    state_sel = st.selectbox("State Region", options=state_options, index=0, label_visibility="collapsed")
+# RENDER HORIZONTAL FILTER GRIDS
+filter_c1, filter_col2, filter_col3, filter_col4 = st.columns([1.5, 1, 1, 1])
+with filter_c1: search_str = st.text_input("Global Search Input Tracker", "", placeholder="🔍 Type Invoice No, Consignee Name to filter dashboard...", label_visibility="collapsed")
+with filter_col2: ptype_sel = st.selectbox("Party Type Selector Option", options=ptype_options, label_visibility="collapsed")
+with filter_col3: party_sel = st.selectbox("Party Distributor Selector", options=party_options, label_visibility="collapsed")
+with filter_col4: state_sel = st.selectbox("State Zone Selector", options=state_options, label_visibility="collapsed")
 
-st.markdown("<div style='margin-top:5px;'></div>", unsafe_allow_html=True)
-filter_row2_col1, filter_row2_col2, filter_row2_col3 = st.columns([1, 1, 1.2])
+filter_row2_c1, filter_row2_c2, filter_row2_c3 = st.columns([1, 1, 1.2])
+with filter_row2_c1: lr_status_sel = st.selectbox("Live LR Status Selector Options", options=lr_status_options, label_visibility="collapsed")
+with filter_row2_c2: approval_sel = st.selectbox("System Milestone handshakes Approval Selector Options", options=approval_options, label_visibility="collapsed")
+with filter_row2_c3: date_range_selection = st.date_input("Billing date loop window range selector option", value=(min_date_found, max_date_found), min_value=date(2023, 1, 1), max_value=date(2029, 12, 31), label_visibility="collapsed")
 
-with filter_row2_col1:
-    lr_status_sel = st.selectbox("LR Status Filter", options=lr_status_options, index=0, label_visibility="collapsed")
-with filter_row2_col2:
-    approval_sel = st.selectbox("Order Approval Status Filter", options=approval_options, index=0, label_visibility="collapsed")
-with filter_row2_col3:
-    date_range_selection = st.date_input(
-        "Billing Date Window Selection",
-        value=(min_date_found, max_date_found),
-        min_value=date(2023, 1, 1),
-        max_value=date(2029, 12, 31),
-        label_visibility="collapsed"
-    )
-
-# 📊 METRICS KPI SUMMARY INFRASTRUCTURE SECTION BAR
-st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
-stat_col1, stat_col2, stat_col3 = st.columns(3)
-
-total_shipments = len(df)
-pending_count = len(df[df['lr_current_status'].astype(str).str.lower().str.contains('pending|transit', na=False)]) if 'lr_current_status' in df.columns else 0
-kerala_total = len(df[df['party_state'].astype(str).str.upper() == 'KERALA']) if 'party_state' in df.columns else 0
-
-with stat_col1: st.markdown(f'<div class="stat-box"><div class="stat-val">{total_shipments}</div><div class="stat-lbl">Total Logged Shipments</div></div>', unsafe_allow_html=True)
-with stat_col2: st.markdown(f'<div class="stat-box"><div class="stat-val">{pending_count}</div><div class="stat-lbl">In-Transit Delivery Pipeline</div></div>', unsafe_allow_html=True)
-with stat_col3: st.markdown(f'<div class="stat-box"><div class="stat-val">{kerala_total}</div><div class="stat-lbl">Active Kerala Nodes</div></div>', unsafe_allow_html=True)
-
-# Filter processing layers with reset bypass fallbacks
+# Process dynamic dropdown multi-filters cascades queries reductions loops frames bounds constraints
 f_df = df.copy()
 if not f_df.empty:
     if search_str:
         sl = search_str.lower()
         search_mask = pd.Series(False, index=f_df.index)
-        for col in f_df.columns:
-            search_mask = search_mask | f_df[col].astype(str).str.lower().str.contains(sl, na=False)
+        for col in f_df.columns: search_mask = search_mask | f_df[col].astype(str).str.lower().str.contains(sl, na=False)
         f_df = f_df[search_mask]
-
-    if ptype_sel != "All Party-Types" and 'party_type' in f_df.columns: f_df = f_df[f_df['party_type'].astype(str) == ptype_sel]
-    if party_sel != "All Parties" and 'party_name' in f_df.columns: f_df = f_df[f_df['party_name'].astype(str) == party_sel]
-    if state_sel != "All States" and 'party_state' in f_df.columns: f_df = f_df[f_df['party_state'].astype(str) == state_sel]
-    if lr_status_sel != "All LR Statuses" and 'lr_current_status' in f_df.columns: f_df = f_df[f_df['lr_current_status'].astype(str) == lr_status_sel]
-    if approval_sel != "All Order Statuses" and 'order_approval_status' in f_df.columns: f_df = f_df[f_df['order_approval_status'].astype(str) == approval_sel]
-    
+    if ptype_sel != "All Party-Types": f_df = f_df[f_df['party_type'].astype(str) == ptype_sel]
+    if party_sel != "All Parties": f_df = f_df[f_df['party_name'].astype(str) == party_sel]
+    if state_sel != "All States": f_df = f_df[f_df['party_state'].astype(str) == state_sel]
+    if lr_status_sel != "All LR Statuses": f_df = f_df[f_df['lr_current_status'].astype(str) == lr_status_sel]
+    if approval_sel != "All Order Statuses": f_df = f_df[f_df['order_approval_status'].astype(str) == approval_sel]
     if 'doc_date' in f_df.columns and isinstance(date_range_selection, tuple) and len(date_range_selection) == 2:
-        start_bound, end_bound = date_range_selection
+        s_b, e_b = date_range_selection
         f_df['temp_parsed_date'] = pd.to_datetime(f_df['doc_date'], errors='coerce').dt.date
-        f_df = f_df[(f_df['temp_parsed_date'] >= start_bound) & (f_df['temp_parsed_date'] <= end_bound)]
-        f_df = f_df.drop(columns=['temp_parsed_date'])
+        f_df = f_df[(f_df['temp_parsed_date'] >= s_b) & (f_df['temp_parsed_date'] <= e_b)].drop(columns=['temp_parsed_date'])
 
-# 2. CONTEXTUAL IN-LINE FORM MODAL
+# SUMMARY SCORECARDS HUD METRICS ROW
+st.markdown("<div style='margin-top:8px;'></div>", unsafe_allow_html=True)
+stat_c1, stat_c2, stat_c3 = st.columns(3)
+total_shipments = len(df)
+pending_count = len(df[df['lr_current_status'].astype(str).str.lower().str.contains('pending|transit', na=False)]) if 'lr_current_status' in df.columns else 0
+kerala_total = len(df[df['party_state'].astype(str).str.upper() == 'KERALA']) if 'party_state' in df.columns else 0
+
+with stat_c1: st.markdown(f'<div class="stat-box"><div class="stat-val">{total_shipments}</div><div class="stat-lbl">Total Shipments Logged</div></div>', unsafe_allow_html=True)
+with stat_c2: st.markdown(f'<div class="stat-box"><div class="stat-val">{pending_count}</div><div class="stat-lbl">Active In-Transit Pipeline</div></div>', unsafe_allow_html=True)
+with stat_c3: st.markdown(f'<div class="stat-box"><div class="stat-val">{kerala_total}</div><div class="stat-lbl">Kerala Distribution Nodes</div></div>', unsafe_allow_html=True)
+
+st.markdown('</div>', unsafe_allow_html=True)
+
+
+# =========================================================
+# 📦 MAIN BODY AREA: SCROLLING WORKSPACE GRID (SCROLLS DOWN)
+# =========================================================
+st.markdown('<div class="main-scroll-body">', unsafe_allow_html=True)
+
+# 1. LIVE CONTEXTUAL RE-WRITE WORKSPACE PANEL MODALS DRAWER LINK
 if st.session_state["selected_edit_doc"]:
     tgt_id = st.session_state["selected_edit_doc"]
     tgt_row = df[df['doc_number'] == tgt_id].iloc[0]
     
     st.markdown(f"<div style='background-color:#1E232A; padding:12px; border-radius:4px; margin-bottom:15px; border-left:4px solid #D4AF37;'>", unsafe_allow_html=True)
-    st.markdown(f"<h4>📝 Modifying Record Row Target: Invoice {tgt_id}</h4>", unsafe_allow_html=True)
-    edit_tabs = st.tabs(["🔒 Manual LR status Overwrite", "🤖 API Carrier Auto Sync", "📄 Milestone Handshake Approval"])
+    st.markdown(f"<h4>📝 Modifying Record Target: Invoice {tgt_id}</h4>", unsafe_allow_html=True)
+    edit_tabs = st.tabs(["Manual LR Status Overwrite", "API Gateway Auto-Sync Engine", "Order Approval Handshaking Milestones"])
     
     with edit_tabs[0]:
         ec1, ec2 = st.columns(2)
-        with ec1: lr_val = st.text_input("New LR Status State Value:", value=str(tgt_row.get('lr_current_status', '')))
-        with ec2: rem_val = st.text_input("Internal Status Comment remark:", value=str(tgt_row.get('lr_status_remark', '')))
+        with ec1: lr_val = st.text_input("New Courier Status:", value=str(tgt_row.get('lr_current_status', '')))
+        with ec2: rem_val = st.text_input("Internal Remark String:", value=str(tgt_row.get('lr_status_remark', '')))
         if st.button("Commit Manual Overwrites"):
             requests.patch(f"{BASE_API_ROUTE}?doc_number=eq.{tgt_id}", headers=HTTP_HEADERS, json={"lr_current_status": lr_val, "lr_status_remark": rem_val})
             st.session_state["auric_master_dataframe"].loc[st.session_state["auric_master_dataframe"]['doc_number'] == tgt_id, 'lr_current_status'] = lr_val
@@ -343,7 +341,7 @@ if st.session_state["selected_edit_doc"]:
             
     with edit_tabs[1]:
         st.caption(f"Gateway Tracking Reference ID Link: {tgt_row.get('lr_number', 'N/A')}")
-        if st.button("Query Remote Carrier Webhooks APIs Node Override"):
+        if st.button("Force Automated Sync Execution Override via Webhook Link"):
             requests.patch(f"{BASE_API_ROUTE}?doc_number=eq.{tgt_id}", headers=HTTP_HEADERS, json={"lr_current_status": "Delivered"})
             st.session_state["auric_master_dataframe"].loc[st.session_state["auric_master_dataframe"]['doc_number'] == tgt_id, 'lr_current_status'] = "Delivered"
             st.session_state["selected_edit_doc"] = None
@@ -352,58 +350,52 @@ if st.session_state["selected_edit_doc"]:
             
     with edit_tabs[2]:
         ac1, ac2 = st.columns(2)
-        with ac1: app_val = st.text_input("Approval Status Field:", value=str(tgt_row.get('order_approval_status', 'Approved')))
-        with ac2: app_rem = st.text_area("Milestone Internal Comment String:", value=str(tgt_row.get('order_approval_remark', '')))
+        with ac1: app_val = st.text_input("Approval Milestone Level:", value=str(tgt_row.get('order_approval_status', 'Approved')))
+        with ac2: app_rem = st.text_area("Audit Log Internal Comment:", value=str(tgt_row.get('order_approval_remark', '')))
         if st.button("Save Approval Milestone"):
             requests.patch(f"{BASE_API_ROUTE}?doc_number=eq.{tgt_id}", headers=HTTP_HEADERS, json={"order_approval_status": app_val, "order_approval_remark": app_rem})
             st.session_state["selected_edit_doc"] = None
             st.toast("Milestone logged successfully!")
             st.rerun()
             
-    if st.button("Cancel Modifications Workspace Form"):
+    if st.button("Cancel Modifications and Close Workspace"):
         st.session_state["selected_edit_doc"] = None
         st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
-# 3. THE HIGH-DENSITY PAGINATED WINDOW LIST DATA CANVAS
-st.markdown("### 📦 Active Shipments Track List Window")
+# 2. THE HOVER-ISOLATED SCROLL GRID VIEWPORT CANVAS WINDOW
 if f_df.empty:
-    st.info("No shipments records found matching your active filter choices. Clear elements inputs parameters to reset view loops.")
+    st.info("No shipments records found in active memory matches. Open the sidebar upload tool to load tracking rows.")
 else:
     ROWS_PER_PAGE = 100
     total_lines = len(f_df)
     max_pages = max(1, ((total_lines - 1) // ROWS_PER_PAGE) + 1)
     
-    page_col_left, page_col_right = st.columns([3, 1])
-    with page_col_left:
+    p_col1, p_col2 = st.columns([3, 1])
+    with p_col1:
         current_page = st.selectbox(
-            "Page Navigation Selector Dropdown Bar", options=range(1, max_pages + 1),
-            format_func=lambda x: f"Page {x} of {max_pages} (Displaying serial rows indices {(x-1)*ROWS_PER_PAGE + 1} to {min(x*ROWS_PER_PAGE, total_lines)} out of {total_lines} filtered entries)",
+            "Page Drawer Index Selection", options=range(1, max_pages + 1),
+            format_func=lambda x: f"Page {x} of {max_pages} (Displaying serial entries rows index lines {(x-1)*ROWS_PER_PAGE + 1} to {min(x*ROWS_PER_PAGE, total_lines)} out of {total_lines} filtered datasets lines)",
             label_visibility="collapsed"
         )
-    with page_col_right:
+    with p_col2:
         csv_buffer = f_df.to_csv(index=False).encode('utf-8')
         st.download_button(label="📥 Download Data CSV Manifest", data=csv_buffer, file_name="auric_filtered_manifest.csv", mime="text/csv")
 
     start_offset = (current_page - 1) * ROWS_PER_PAGE
     paginated_df = f_df.iloc[start_offset:start_offset + ROWS_PER_PAGE]
 
+    # Generate custom table static structural layout headers title row
     st.markdown(
-        f"<div style='background-color:#161B22; padding:6px; font-weight:600; display:grid; grid-template-columns:0.5fr 0.5fr 1fr 1.5fr 1.5fr 1fr 1fr 1fr 1fr 1fr 1fr; border-bottom:2px solid #2B323C; font-size:12px; color:#D4AF37;'>"
-        f"<div>S.No.</div>"
-        f"<div>Action</div>"
-        f"<div>Invoice No</div>"
-        f"<div>Consignee Name</div>"
-        f"<div>Registered Party</div>"
-        f"<div>Billing Date</div>"
-        f"<div>Amount (INR)</div>"
-        f"<div>Courier LR Tracking</div>"
-        f"<div>Dispatch Date</div>"
-        f"<div>Delivery Status</div>"
-        f"<div>Zone State</div>"
+        f"<div style='background-color:#161B22; padding:8px 6px; font-weight:600; display:grid; grid-template-columns:0.4fr 0.4fr 1fr 1.5fr 1.5fr 1fr 1fr 1fr 1fr 1fr 1fr; border-bottom:2px solid #2B323C; font-size:11px; color:#D4AF37; text-transform:uppercase; letter-spacing:0.5px;'>"
+        f"<div>S.No.</div><div>Action</div><div>Invoice No</div><div>Consignee Name</div><div>Registered Party</div>"
+        f"<div>Billing Date</div><div>Amount (INR)</div><div>Tracking LR</div><div>Dispatch Date</div><div>Delivery Status</div><div>Zone State</div>"
         f"</div>", 
         unsafe_allow_html=True
     )
+    
+    # Render scroll viewport window canvas box
+    st.markdown('<div class="grid-window-viewport">', unsafe_allow_html=True)
     
     serial_counter = start_offset + 1
     for idx, row in paginated_df.iterrows():
@@ -415,22 +407,28 @@ else:
         else:
             status_html = f"<span class='status-badge-transit'>{status_string}</span>"
             
-        r_col_sno, r_col_act, r_col_inv, r_col_con, r_col_pty, r_col_dt, r_col_val, r_col_lr, r_col_disp, r_col_st, r_col_zone = st.columns([0.5, 0.5, 1, 1.5, 1.5, 1, 1, 1, 1, 1, 1])
+        r_col_sno, r_col_act, r_col_inv, r_col_con, r_col_pty, r_col_dt, r_col_val, r_col_lr, r_col_disp, r_col_st, r_col_zone = st.columns([0.4, 0.4, 1, 1.5, 1.5, 1, 1, 1, 1, 1, 1])
         
-        with r_col_sno: st.markdown(f"<p style='font-size:12px; margin:0; color:#A0AEC0;'>{serial_counter}</p>", unsafe_allow_html=True)
+        with r_col_sno: st.markdown(f"<p style='font-size:12px; margin:0; color:#A0AEC0; font-family:monospace;'>{serial_counter}</p>", unsafe_allow_html=True)
         with r_col_act:
-            if st.button(f"📝 Edit", key=f"edit_{inv_no}_{idx}"):
+            st.markdown('<div class="compact-edit-btn">', unsafe_allow_html=True)
+            if st.button("Edit", key=f"edit_{inv_no}_{idx}"):
                 st.session_state["selected_edit_doc"] = inv_no
                 st.rerun()
-        with r_col_inv: st.markdown(f"<p style='font-size:12px; margin:0;'>{inv_no}</p>", unsafe_allow_html=True)
-        with r_col_con: st.markdown(f"<p style='font-size:12px; margin:0;'>{row.get('consignee_name', 'N/A')}</p>", unsafe_allow_html=True)
-        with r_col_pty: st.markdown(f"<p style='font-size:12px; margin:0;'>{row.get('party_name', 'N/A')}</p>", unsafe_allow_html=True)
-        with r_col_dt: st.markdown(f"<p style='font-size:12px; margin:0;'>{row.get('doc_date', 'N/A')}</p>", unsafe_allow_html=True)
-        with r_col_val: st.markdown(f"<p style='font-size:12px; margin:0;'>{row.get('doc_net_value', 'N/A')}</p>", unsafe_allow_html=True)
-        with r_col_lr: st.markdown(f"<p style='font-size:12px; margin:0;'>{row.get('lr_number', 'N/A')}</p>", unsafe_allow_html=True)
-        with r_col_disp: st.markdown(f"<p style='font-size:12px; margin:0;'>{row.get('final_lr_date', 'N/A')}</p>", unsafe_allow_html=True)
-        with r_col_st: st.markdown(f"<div style='font-size:12px; margin:0;'>{status_html}</div>", unsafe_allow_html=True)
-        with r_col_zone: st.markdown(f"<p style='font-size:12px; margin:0; color:#A0AEC0;'>{row.get('party_state', 'N/A')}</p>", unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+        with r_col_inv: st.markdown(f"<p style='font-size:12px; margin:0; font-weight:500;'>{inv_no}</p>", unsafe_allow_html=True)
+        with r_col_con: st.markdown(f"<p style='font-size:11px; margin:0; color:#E2E8F0;'>{row.get('consignee_name', 'N/A')}</p>", unsafe_allow_html=True)
+        with r_col_pty: st.markdown(f"<p style='font-size:11px; margin:0; color:#A0AEC0;'>{row.get('party_name', 'N/A')}</p>", unsafe_allow_html=True)
+        with r_col_dt: st.markdown(f"<p style='font-size:11px; margin:0;'>{row.get('doc_date', 'N/A')}</p>", unsafe_allow_html=True)
+        with r_col_val: st.markdown(f"<p style='font-size:11px; margin:0; font-family:monospace;'>{row.get('doc_net_value', '0.0')}</p>", unsafe_allow_html=True)
+        with r_col_lr: st.markdown(f"<p style='font-size:11px; margin:0; color:#CBD5E1;'>{row.get('lr_number', 'N/A')}</p>", unsafe_allow_html=True)
+        with r_col_disp: st.markdown(f"<p style='font-size:11px; margin:0;'>{row.get('final_lr_date', 'N/A')}</p>", unsafe_allow_html=True)
+        with r_col_st: st.markdown(f"<div style='font-size:11px; margin:0;'>{status_html}</div>", unsafe_allow_html=True)
+        with r_col_zone: st.markdown(f"<p style='font-size:11px; margin:0; color:#A0AEC0;'>{row.get('party_state', 'N/A')}</p>", unsafe_allow_html=True)
         
-        st.markdown("<hr style='margin:2px 0px; border-color:#1E232A;'>", unsafe_allow_html=True)
+        st.markdown("<hr style='margin:4px 0px; border-color:#1E232A;'>", unsafe_allow_html=True)
         serial_counter += 1
+        
+    st.markdown('</div>', unsafe_allow_html=True) # close grid-window-viewport
+
+st.markdown('</div>', unsafe_allow_html=True) # close main-scroll-body
